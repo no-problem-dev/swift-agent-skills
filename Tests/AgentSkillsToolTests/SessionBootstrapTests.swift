@@ -38,16 +38,17 @@ struct SessionBootstrapTests {
         ))
         await registry.load()
 
-        // 3. Render the Tier-1 catalog → goes into the worker's system prompt.
+        // 3. Build the invoke_skill tool — it derives BOTH the name enum and the
+        //    Tier-1 catalog (carried in systemInstruction) from one skill snapshot.
         let available = await registry.available()
-        let catalog = try #require(SkillCatalogRenderer().render(available))
-        #expect(catalog.contains("<name>cite-sources</name>"))
-        #expect(!catalog.contains("<location>"))  // location hidden → tool is the only path
-
-        // 4. Build the invoke_skill tool with the name enum bound to the live catalog.
         let session = SkillSessionState()
         let activator = SkillActivator(registry: registry, session: session)
-        let tool = try #require(InvokeSkillTool.make(availableNames: available.map(\.name), activator: activator))
+        let tool = try #require(InvokeSkillTool.make(skills: available, activator: activator))
+
+        // The catalog rides into the system prompt via the loop's systemInstruction path.
+        let catalog = try #require(tool.systemInstruction)
+        #expect(catalog.contains("<name>cite-sources</name>"))
+        #expect(!catalog.contains("<location>"))  // location hidden → tool is the only path
 
         // 5. The model calls invoke_skill(name: "cite-sources").
         let call = try JSONSerialization.data(withJSONObject: ["name": "cite-sources"])
