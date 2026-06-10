@@ -11,9 +11,9 @@ let package = Package(
         .library(name: "AgentSkillsTool", targets: ["AgentSkillsTool"]),
     ],
     dependencies: [
-        .package(path: "../swift-structured-data"),
-        .package(path: "../swift-persistence"),
-        .package(path: "../swift-llm-client"),
+        .package(url: "https://github.com/no-problem-dev/swift-structured-data.git", from: "1.3.0"),
+        .package(url: "https://github.com/no-problem-dev/swift-persistence.git", from: "2.1.1"),
+        .package(url: "https://github.com/no-problem-dev/swift-llm-client.git", from: "3.5.0"),
     ],
     targets: [
         // Layer 1: strict Agent Skills standard core (parser / validator / catalog).
