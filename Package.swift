@@ -11,8 +11,11 @@ let package = Package(
         .library(name: "AgentSkillsTool", targets: ["AgentSkillsTool"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/no-problem-dev/swift-structured-data.git", from: "1.3.0"),
-        .package(url: "https://github.com/no-problem-dev/swift-persistence.git", from: "2.1.1"),
+        // Local path during authoring development — restore to URL + tag at release:
+        //   swift-structured-data >= 1.4.0 (YAMLSerializer)
+        //   swift-persistence    >= 2.2.0 (FileSystemWriting)
+        .package(path: "../swift-structured-data"),
+        .package(path: "../swift-persistence"),
         .package(url: "https://github.com/no-problem-dev/swift-llm-client.git", from: "3.5.0"),
     ],
     targets: [
