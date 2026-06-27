@@ -33,7 +33,8 @@ jobs:
         run: |
           swift package --allow-writing-to-directory ./docs \
             generate-documentation \
-            --target AgentSkills \
+            --enable-experimental-combined-documentation \
+            --target AgentSkills --target AgentSkillsDiscovery --target AgentSkillsRuntime --target AgentSkillsTool \
             --disable-indexing \
             --transform-for-static-hosting \
             --hosting-base-path swift-agent-skills \
