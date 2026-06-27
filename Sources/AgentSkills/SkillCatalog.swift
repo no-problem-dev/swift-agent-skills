@@ -45,7 +45,7 @@ public enum SkillCatalog {
     }
 
     /// Mirrors Python `html.escape(quote=True)`: escapes `& < > " '`.
-    static func htmlEscape(_ string: String) -> String {
+    private static func htmlEscape(_ string: String) -> String {
         var result = string.replacingOccurrences(of: "&", with: "&amp;")
         result = result.replacingOccurrences(of: "<", with: "&lt;")
         result = result.replacingOccurrences(of: ">", with: "&gt;")

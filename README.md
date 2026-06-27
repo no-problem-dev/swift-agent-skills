@@ -74,7 +74,7 @@ if let catalog = renderer.render(available) {
 // 3. Tier-2 tool → worker tool list (name enum bound to the live catalog).
 let activator = SkillActivator(registry: registry, session: SkillSessionState())
 var tools: [any Tool] = existingWorkerTools
-if let skillTool = InvokeSkillTool.make(availableNames: available.map(\.name), activator: activator) {
+if let skillTool = InvokeSkillTool.make(skills: available, activator: activator) {
     tools.append(skillTool)
 }
 ```

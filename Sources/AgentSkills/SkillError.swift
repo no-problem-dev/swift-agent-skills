@@ -9,19 +9,19 @@ public struct SkillParseError: Error, Equatable, CustomStringConvertible {
     public init(_ message: String) { self.message = message }
     public var description: String { message }
 
-    static let mustStartWithFrontmatter = SkillParseError(
+    public static let mustStartWithFrontmatter = SkillParseError(
         "SKILL.md must start with YAML frontmatter (---)"
     )
-    static let notProperlyClosed = SkillParseError(
+    public static let notProperlyClosed = SkillParseError(
         "SKILL.md frontmatter not properly closed with ---"
     )
-    static let notAMapping = SkillParseError(
+    public static let notAMapping = SkillParseError(
         "SKILL.md frontmatter must be a YAML mapping"
     )
-    static func invalidYAML(_ detail: String) -> SkillParseError {
+    public static func invalidYAML(_ detail: String) -> SkillParseError {
         SkillParseError("Invalid YAML in frontmatter: \(detail)")
     }
-    static func skillMDNotFound(in directory: String) -> SkillParseError {
+    public static func skillMDNotFound(in directory: String) -> SkillParseError {
         SkillParseError("SKILL.md not found in \(directory)")
     }
 }
