@@ -2,18 +2,18 @@ import Foundation
 import StructuredDataCore
 import YAMLParsing
 
-/// Authoring side of `SKILL.md` — the inverse of ``SkillFrontmatter`` parsing.
+/// `SKILL.md` のオーサリング側 — ``SkillFrontmatter`` パースの逆操作。
 ///
-/// Serializes ``SkillProperties`` to a standard-conformant frontmatter mapping
-/// and full `SKILL.md` document. Pure (no filesystem), so it is CLI-testable and
-/// round-trips with the parser: `parseFrontmatter(serialize(p, body))` recovers
-/// `p` and `body`. Disk writing lives in `AgentSkillsDiscovery`'s `SkillWriter`.
+/// ``SkillProperties`` を仕様準拠のフロントマターおよびフル `SKILL.md` ドキュメントへシリアライズする。
+/// ファイルシステム不要のピュア実装で、`parseFrontmatter(serialize(p, body))` により `p` と `body` を復元できる。
+/// ディスク書き込みは `AgentSkillsDiscovery` の `SkillWriter` が担う。
 public enum SkillDocument {
 
     private static let serializer = YAMLSerializer(options: .init(sortKeys: false))
 
-    /// Builds the frontmatter mapping in canonical spec order, omitting absent
-    /// optional fields. `metadata` keys are sorted for deterministic output.
+    /// 仕様が定める標準順序でフロントマターマッピングを構築する。
+    ///
+    /// 未設定のオプションフィールドは省略する。`metadata` のキーは決定論的出力のためソートする。
     public static func frontmatter(_ properties: SkillProperties) -> OrderedObject {
         var object = OrderedObject()
         object.append(key: "name", value: .string(properties.name))
@@ -37,13 +37,12 @@ public enum SkillDocument {
         return object
     }
 
-    /// Serializes the frontmatter mapping to YAML text (no `---` fences).
+    /// フロントマターマッピングを YAML テキストへシリアライズする（`---` フェンスなし）。
     public static func frontmatterYAML(_ properties: SkillProperties) -> String {
         serializer.string(from: .object(frontmatter(properties)))
     }
 
-    /// Serializes a complete `SKILL.md` document: fenced frontmatter followed by
-    /// the markdown body.
+    /// 完全な `SKILL.md` ドキュメントをシリアライズする。フェンス付きフロントマターとマークダウン本体を連結する。
     public static func serialize(properties: SkillProperties, body: String) -> String {
         let yaml = frontmatterYAML(properties)
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,8 +52,7 @@ public enum SkillDocument {
         return "---\n" + yaml + "---\n\n" + trimmedBody + "\n"
     }
 
-    /// Strict validation gate for authoring: the new artifact must fully conform
-    /// (same rules as `skills-ref validate`). Returns error strings; empty = valid.
+    /// オーサリング用の厳格バリデーションゲート。`skills-ref validate` と同じルールで検証し、エラー文字列の配列を返す（空 = 有効）。
     public static func validate(_ properties: SkillProperties) -> [String] {
         SkillValidator.validate(frontmatter: frontmatter(properties), directoryName: properties.name)
     }

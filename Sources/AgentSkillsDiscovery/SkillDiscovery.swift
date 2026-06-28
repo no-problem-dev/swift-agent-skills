@@ -2,30 +2,34 @@ import Foundation
 import AgentSkills
 import PersistenceCore
 
-/// Discovers skills from some source and loads them leniently.
+/// スキルをあるソースから探索して寛容に読み込むプロトコル。
 public protocol SkillDiscovering: Sendable {
+    /// スキルを探索し、ロードした結果と診断（警告・エラー）を返す。
+    ///
+    /// 実装は寛容（warn-and-load）— 厳格バリデーションに失敗しても本体と description が揃っていれば読み込み、
+    /// 問題は ``DiscoveredSkills/diagnostics`` に記録する。
     func discover() async -> DiscoveredSkills
 }
 
-/// Configuration for filesystem-based discovery.
+/// ファイルシステムベースの探索設定。
 public struct SkillDiscoveryConfig: Sendable {
-    /// Where the project tree starts (the parent walk begins here).
+    /// プロジェクトツリーの起点（親ディレクトリウォークの開始点）。
     public var projectRoot: URL?
-    /// The parent walk stops at this directory (e.g. the git/worktree root).
+    /// 親ウォークの終点（例: git/worktree ルート）。ここを含む上位は探索しない。
     public var worktreeStop: URL?
-    /// The user's home directory (for user-level skills).
+    /// ユーザーレベルスキルのホームディレクトリ。
     public var homeDirectory: URL?
-    /// Scan `.agents/skills/` — the cross-client standard location.
+    /// `.agents/skills/` を探索するか（クロスクライアント標準の場所）。
     public var scanAgentsDir: Bool
-    /// Scan `.claude/skills/` — pragmatic compatibility with existing skills.
+    /// `.claude/skills/` を探索するか（既存スキルとの実用的な互換性）。
     public var scanClaudeDir: Bool
-    /// Additional explicit skill roots to scan.
+    /// 追加で明示的に探索するスキルルート。
     public var extraRoots: [URL]
-    /// Max directory depth to descend within a root.
+    /// ルート内の最大ディレクトリ探索深度。
     public var maxDepth: Int
-    /// Max directories to visit per root (runaway guard).
+    /// ルートあたりの最大訪問ディレクトリ数（暴走ガード）。
     public var maxEntries: Int
-    /// Trust gate for project-level roots; untrusted roots are skipped.
+    /// プロジェクトレベルルートのトラストゲート。信頼されていないルートはスキップする。
     public var isTrusted: @Sendable (URL) -> Bool
 
     public init(
@@ -51,7 +55,7 @@ public struct SkillDiscoveryConfig: Sendable {
     }
 }
 
-/// Scope a skill was found in. Determines collision precedence: project > user.
+/// スキルが発見されたスコープ。衝突時の優先度を決定する（explicit > project > user）。
 public enum SkillScope: Int, Sendable, Comparable {
     case user = 0
     case project = 1
@@ -59,7 +63,7 @@ public enum SkillScope: Int, Sendable, Comparable {
     public static func < (lhs: SkillScope, rhs: SkillScope) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
-/// Filesystem-backed lenient discovery over an injected ``FileSystemReading``.
+/// インジェクトされた ``FileSystemReading`` を介してファイルシステムから寛容にスキルを探索する実装。
 public struct FileSystemSkillDiscovery<FS: FileSystemReading>: SkillDiscovering {
     private let config: SkillDiscoveryConfig
     private let fileSystem: FS
@@ -135,7 +139,7 @@ public struct FileSystemSkillDiscovery<FS: FileSystemReading>: SkillDiscovering 
         return names
     }
 
-    /// Directories from `projectRoot` up to (and including) `worktreeStop`.
+    /// `projectRoot` から `worktreeStop`（含む）までのディレクトリ一覧。
     private func projectWalk() -> [URL] {
         guard let start = config.projectRoot?.standardizedFileURL else { return [] }
         var dirs: [URL] = []
@@ -245,7 +249,7 @@ public struct FileSystemSkillDiscovery<FS: FileSystemReading>: SkillDiscovering 
 
 import StructuredDataCore
 
-/// Small holder so `loadSkill` can carry the parsed mapping and body together.
+/// `loadSkill` がパース済みマッピングと本体を一緒に保持するための内部ホルダー。
 private struct StructuredFrontmatter {
     let object: OrderedObject
     let body: String

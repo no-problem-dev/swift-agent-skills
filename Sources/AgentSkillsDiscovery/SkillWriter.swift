@@ -2,27 +2,25 @@ import Foundation
 import AgentSkills
 import PersistenceCore
 
-/// Errors raised while authoring skills to disk.
+/// スキルのディスク書き込み時にスローされるエラー。
 public enum SkillWriteError: Error, Equatable {
-    /// The properties failed strict validation; carries the validator messages.
+    /// 厳格バリデーション失敗。バリデーターのメッセージを保持する。
     case validationFailed([String])
-    /// A skill directory already exists at the target name.
+    /// 対象名のスキルディレクトリが既に存在する。
     case nameCollision(String)
-    /// The skill to update/delete does not exist.
+    /// 更新・削除対象のスキルが存在しない。
     case notFound(String)
 }
 
-/// Writes user-authored skills under a root directory — the write mirror of
-/// ``FileSystemSkillDiscovery``.
+/// ルートディレクトリ配下へユーザー作成スキルを書き込む — ``FileSystemSkillDiscovery`` の書き込み側。
 ///
-/// Serializes ``SkillProperties`` with ``SkillDocument`` (strict-validated first)
-/// and persists through an injected ``FileSystemWriting`` backend, so authoring
-/// is testable in-memory and swappable for sandboxed/remote storage. A skill
-/// lives at `<root>/<name>/SKILL.md`; renames move the whole directory so
-/// resource files (`scripts/`, `references/`, `assets/`) are preserved.
+/// ``SkillDocument`` で厳格バリデーションを経てから ``SkillProperties`` をシリアライズし、
+/// インジェクトされた ``FileSystemWriting`` バックエンドへ永続化する。
+/// テスト時はインメモリ実装に差し替え可能。スキルは `<root>/<name>/SKILL.md` に格納され、
+/// リネーム時はディレクトリごと移動するためリソースファイル（`scripts/`, `references/`, `assets/`）が保持される。
 public struct SkillWriter<FS: FileSystemReading & FileSystemWriting>: Sendable {
 
-    /// The user skills root, e.g. `~/Documents/.agents/skills`.
+    /// ユーザースキルのルートディレクトリ。例: `~/Documents/.agents/skills`。
     public let root: URL
     public let fileSystem: FS
 
@@ -39,7 +37,7 @@ public struct SkillWriter<FS: FileSystemReading & FileSystemWriting>: Sendable {
         directory(name).appendingPathComponent("SKILL.md")
     }
 
-    /// Creates a new skill. Validates, then fails if a skill of that name exists.
+    /// 新しいスキルを作成する。バリデーション後、同名スキルが存在すれば失敗する。
     public func create(properties: SkillProperties, body: String) async throws {
         try validate(properties)
         guard await fileSystem.exists(directory(properties.name)) == false else {
@@ -49,8 +47,7 @@ public struct SkillWriter<FS: FileSystemReading & FileSystemWriting>: Sendable {
                                    to: manifest(properties.name))
     }
 
-    /// Updates an existing skill, optionally renaming it. A rename moves the
-    /// directory (preserving resources) before rewriting the manifest.
+    /// 既存スキルを更新する。リネームする場合はマニフェスト書き直しの前にディレクトリを移動（リソースを保持）する。
     public func update(originalName: String, properties: SkillProperties, body: String) async throws {
         try validate(properties)
         guard await fileSystem.exists(directory(originalName)) else {
@@ -66,7 +63,7 @@ public struct SkillWriter<FS: FileSystemReading & FileSystemWriting>: Sendable {
                                    to: manifest(properties.name))
     }
 
-    /// Deletes a skill directory. No-op if it does not exist.
+    /// スキルディレクトリを削除する。存在しない場合は何もしない。
     public func delete(name: String) async throws {
         try await fileSystem.removeItem(directory(name))
     }

@@ -3,19 +3,18 @@ import StructuredDataCore
 import YAMLParsing
 import PersistenceCore
 
-/// YAML frontmatter parsing for `SKILL.md` files.
+/// `SKILL.md` の YAML フロントマターパーサー。
 ///
-/// Ports `skills-ref` parser.py. Pure parsing (``parseFrontmatter(_:)``) needs
-/// no filesystem; the directory-driven entry points take an injected
-/// ``FileSystemReading`` so they are swappable and testable in-memory.
+/// `skills-ref` parser.py を移植。``parseFrontmatter(_:)`` はファイルシステム不要のピュア関数。
+/// ディレクトリ起点の API は ``FileSystemReading`` をインジェクションで受け取るため、
+/// インメモリ実装への差し替えとテストが容易。
 public enum SkillFrontmatter {
 
     private static let yaml = YAMLParser()
 
-    /// Splits `SKILL.md` content into frontmatter mapping and markdown body.
+    /// `SKILL.md` の内容をフロントマターとマークダウン本体に分割する。
     ///
-    /// - Throws: ``SkillParseError`` if frontmatter is missing, unclosed, invalid
-    ///   YAML, or not a mapping.
+    /// - Throws: フロントマターが存在しない・閉じていない・不正な YAML・マッピングでない場合は ``SkillParseError``。
     public static func parseFrontmatter(_ content: String) throws -> (frontmatter: OrderedObject, body: String) {
         guard content.hasPrefix("---") else {
             throw SkillParseError.mustStartWithFrontmatter
@@ -43,7 +42,7 @@ public enum SkillFrontmatter {
         return (mapping, body)
     }
 
-    /// Locates the skill manifest, preferring `SKILL.md` over `skill.md`.
+    /// スキルマニフェストを検索する。`SKILL.md` を `skill.md` より優先する。
     public static func findSkillMD(in skillDirectory: URL, fileSystem: some FileSystemReading) async -> URL? {
         for name in ["SKILL.md", "skill.md"] {
             let candidate = skillDirectory.appendingPathComponent(name)
@@ -54,12 +53,12 @@ public enum SkillFrontmatter {
         return nil
     }
 
-    /// Reads parsed properties from a skill directory's `SKILL.md`.
+    /// スキルディレクトリの `SKILL.md` からプロパティを読み込む。
     ///
-    /// Does not perform full validation (use ``SkillValidator``).
+    /// 完全なバリデーションは行わない（``SkillValidator`` を使うこと）。
     ///
-    /// - Throws: ``SkillParseError`` if the manifest is missing or malformed,
-    ///   ``SkillValidationError`` if `name`/`description` are missing.
+    /// - Throws: マニフェストが存在しないか不正な場合は ``SkillParseError``、
+    ///   `name`/`description` が欠損する場合は ``SkillValidationError``。
     public static func readProperties(
         from skillDirectory: URL,
         fileSystem: some FileSystemReading

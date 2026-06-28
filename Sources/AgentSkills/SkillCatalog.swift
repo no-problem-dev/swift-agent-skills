@@ -1,17 +1,15 @@
 import Foundation
 import PersistenceCore
 
-/// Generates the `<available_skills>` XML block for agent system prompts.
+/// エージェントのシステムプロンプト向け `<available_skills>` XML ブロックを生成する。
 ///
-/// Ports `skills-ref` prompt.py for byte-level parity. This is the reference
-/// catalog form (it **includes** `<location>`); the runtime layer may choose a
-/// location-hidden variant to force tool-based activation.
+/// `skills-ref` prompt.py をバイトレベルで移植した参照実装。`<location>` を**含む**仕様準拠形式。
+/// ツール経由のアクティベーションを強制したい場合は、ランタイム層の location を省略する変形を使う。
 public enum SkillCatalog {
 
-    /// Builds the catalog block for the given skill directories.
+    /// 指定したスキルディレクトリ群からカタログブロックを生成する。
     ///
-    /// - Throws: ``SkillParseError`` / ``SkillValidationError`` if any skill's
-    ///   `SKILL.md` cannot be read.
+    /// - Throws: いずれかのスキルの `SKILL.md` を読み込めない場合は ``SkillParseError`` または ``SkillValidationError``。
     public static func toPrompt(
         skillDirectories: [URL],
         fileSystem: some FileSystemReading
@@ -44,7 +42,7 @@ public enum SkillCatalog {
         return lines.joined(separator: "\n")
     }
 
-    /// Mirrors Python `html.escape(quote=True)`: escapes `& < > " '`.
+    /// Python `html.escape(quote=True)` と同等: `& < > " '` をエスケープする。
     private static func htmlEscape(_ string: String) -> String {
         var result = string.replacingOccurrences(of: "&", with: "&amp;")
         result = result.replacingOccurrences(of: "<", with: "&lt;")

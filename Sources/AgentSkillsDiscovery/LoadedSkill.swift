@@ -1,32 +1,33 @@
 import Foundation
 import AgentSkills
 
-/// Where a discovered skill lives.
+/// 発見されたスキルの保存場所。
 public enum SkillLocation: Sendable, Equatable, Codable {
-    /// A `SKILL.md` file on a (possibly virtual) filesystem.
+    /// （仮想も含む）ファイルシステム上の `SKILL.md` ファイル。
     case file(URL)
-    /// A skill bundled into the host, identified by name.
+    /// ホストに組み込まれたビルトインスキル。名前で識別する。
     case builtin(name: String)
 
-    /// The skill's base directory (parent of `SKILL.md`), used to resolve
-    /// relative `scripts/`, `references/`, `assets/` references. `nil` for builtins.
+    /// スキルのベースディレクトリ（`SKILL.md` の親）。
+    ///
+    /// `scripts/`, `references/`, `assets/` の相対パス解決に使う。ビルトインの場合は `nil`。
     public var directory: URL? {
         if case .file(let url) = self { return url.deletingLastPathComponent() }
         return nil
     }
 }
 
-/// Standard resource directories a skill may bundle alongside `SKILL.md`.
+/// スキルが `SKILL.md` と共に格納できる標準リソースディレクトリ群。
 public struct SkillResources: Sendable, Equatable, Codable {
     public static let directoryNames = ["scripts", "references", "assets"]
 
-    /// Absolute path of the skill's base directory.
+    /// スキルのベースディレクトリの絶対パス。
     public let root: URL
-    /// Relative file paths under `scripts/`.
+    /// `scripts/` 配下のファイルの相対パス一覧。
     public let scripts: [String]
-    /// Relative file paths under `references/`.
+    /// `references/` 配下のファイルの相対パス一覧。
     public let references: [String]
-    /// Relative file paths under `assets/`.
+    /// `assets/` 配下のファイルの相対パス一覧。
     public let assets: [String]
 
     public init(root: URL, scripts: [String] = [], references: [String] = [], assets: [String] = []) {
@@ -39,18 +40,19 @@ public struct SkillResources: Sendable, Equatable, Codable {
     public var hasResources: Bool { !scripts.isEmpty || !references.isEmpty || !assets.isEmpty }
 }
 
-/// A skill loaded into memory, ready to be cataloged and activated.
+/// メモリにロードされた、カタログ化・アクティベーション可能なスキル。
 ///
-/// Built leniently: a skill loads even if it fails strict validation (e.g. name
-/// doesn't match its directory) as long as it has the essentials (a body and a
-/// usable description). Strict issues are surfaced as ``SkillDiagnostic`` warnings.
+/// 寛容ロード: `name` がディレクトリ名と一致しないなど厳格バリデーションに失敗しても、
+/// 本体と説明が揃っていれば読み込む。厳格エラーは ``SkillDiagnostic`` の警告として記録される。
 public struct LoadedSkill: Sendable, Equatable, Identifiable, Codable {
     public var id: String { name }
     public let name: String
     public let description: String
+    /// スキルの Markdown 本体（フロントマターを除く）。空文字も許容される。
     public let body: String
     public let location: SkillLocation
     public let properties: SkillProperties
+    /// スキルのリソースディレクトリ群（`scripts/`, `references/`, `assets/`）。ビルトインスキルや対応ディレクトリがない場合は `nil`。
     public let resources: SkillResources?
 
     public init(
@@ -70,7 +72,7 @@ public struct LoadedSkill: Sendable, Equatable, Identifiable, Codable {
     }
 }
 
-/// A non-fatal issue encountered while discovering/loading skills.
+/// スキルの探索・読み込み中に発生した、致命的でない問題。
 public struct SkillDiagnostic: Sendable, Equatable, Codable {
     public enum Severity: String, Sendable, Codable { case warning, error }
     public let severity: Severity
@@ -84,7 +86,7 @@ public struct SkillDiagnostic: Sendable, Equatable, Codable {
     }
 }
 
-/// The result of a discovery pass.
+/// 探索パスの結果。
 public struct DiscoveredSkills: Sendable {
     public let skills: [LoadedSkill]
     public let diagnostics: [SkillDiagnostic]

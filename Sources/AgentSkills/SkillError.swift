@@ -1,9 +1,9 @@
 import Foundation
 
-/// Raised when `SKILL.md` parsing fails.
+/// `SKILL.md` のパース失敗時にスローされるエラー。
 ///
-/// Mirrors `skills-ref` `ParseError`. Messages are reproduced verbatim so a
-/// Swift implementation is byte-compatible with the reference validator output.
+/// `skills-ref` の `ParseError` を移植。メッセージは参照実装と逐語的に一致させており、
+/// `skills-ref validate` の出力とバイト互換。
 public struct SkillParseError: Error, Equatable, CustomStringConvertible {
     public let message: String
     public init(_ message: String) { self.message = message }
@@ -26,9 +26,9 @@ public struct SkillParseError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-/// Raised when required skill properties are missing or malformed.
+/// 必須スキルプロパティの欠損または不正値を示すエラー。
 ///
-/// Mirrors `skills-ref` `ValidationError`. Carries one or more messages.
+/// `skills-ref` の `ValidationError` を移植。1 件以上のメッセージを保持する。
 public struct SkillValidationError: Error, Equatable, CustomStringConvertible {
     public let errors: [String]
     public init(_ message: String) { self.errors = [message] }

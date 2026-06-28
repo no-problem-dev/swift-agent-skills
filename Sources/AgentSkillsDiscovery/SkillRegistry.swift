@@ -1,10 +1,9 @@
 import Foundation
 
-/// In-memory catalog of loaded skills.
+/// ロード済みスキルのインメモリカタログ。
 ///
-/// Builtins are seeded first; discovered (disk) skills with the same name
-/// override them — matching OpenCode/OpenHands ("register built-in before disk
-/// so a user skill can override it").
+/// ビルトインを先にシードし、同名のディスクスキルで上書きする —
+/// OpenCode/OpenHands の「先にビルトインを登録し、ユーザースキルで差し替えられる」仕様に準拠。
 public actor SkillRegistry {
     private var skills: [String: LoadedSkill] = [:]
     private let builtins: [LoadedSkill]
@@ -16,7 +15,7 @@ public actor SkillRegistry {
         self.discovery = discovery
     }
 
-    /// Seeds builtins, then loads and overlays discovered skills.
+    /// ビルトインをシードし、次に探索スキルを読み込んで上書きする。
     public func load() async {
         skills.removeAll()
         diagnostics.removeAll()
@@ -32,18 +31,19 @@ public actor SkillRegistry {
         }
     }
 
+    /// 名前でスキルを取得する。``load()`` 実行前は常に `nil`。
     public func get(_ name: String) -> LoadedSkill? { skills[name] }
 
+    /// 全スキルを名前順で返す。ポリシーフィルタなし（``available(policy:)`` と異なる）。``load()`` 実行前は空。
     public func all() -> [LoadedSkill] { skills.values.sorted { $0.name < $1.name } }
 
-    /// Skills visible to the model, filtered by a policy (permissions, opt-outs).
-    /// Hidden skills are excluded from the catalog rather than blocked at activation.
+    /// ポリシーでフィルタしたモデルに見せるスキル一覧。非表示スキルはアクティベーション拒否ではなくカタログから除外する。
     public func available(policy: SkillPolicy = .init()) -> [LoadedSkill] {
         all().filter { policy.isAllowed($0.name) }
     }
 }
 
-/// Filters which skills are advertised to the model.
+/// モデルにアドバタイズするスキルを絞り込むポリシー。
 public struct SkillPolicy: Sendable {
     public let isAllowed: @Sendable (_ name: String) -> Bool
     public init(isAllowed: @escaping @Sendable (_ name: String) -> Bool = { _ in true }) {

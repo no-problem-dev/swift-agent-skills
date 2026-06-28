@@ -4,15 +4,11 @@ import LLMTool
 import AgentSkillsDiscovery
 import AgentSkillsRuntime
 
-/// The `invoke_skill` tool the agent loop registers — a first-class `Tool` so it
-/// can carry the Tier-1 `<available_skills>` catalog in its `systemInstruction`.
+/// エージェントループが登録する `invoke_skill` ツール — `systemInstruction` に Tier-1 `<available_skills>` カタログを乗せるための一級 `Tool`。
 ///
-/// This unifies, by construction, the two things OpenHands derives separately
-/// from `agent_context.skills` (catalog → system message; auto-attached tool):
-/// here one snapshot of `[LoadedSkill]` produces BOTH the catalog (the loop
-/// injects it via `Tool.systemInstruction`, exactly like SendA2UIToClientTool)
-/// AND the `name` enum the model must pick from. The model can never see a skill
-/// it cannot invoke, and vice versa.
+/// OpenHands が `agent_context.skills` から別々に導出する 2 つの要素（カタログ → システムメッセージ・自動アタッチツール）を
+/// 構造上で統一する: `[LoadedSkill]` の単一スナップショットが、カタログ（`Tool.systemInstruction` 経由でループが注入）と
+/// `name` 列挙の両方を生成する。モデルが見えるスキルと呼び出せるスキルは必ず一致する。
 public struct InvokeSkillTool: Tool {
 
     public static let toolName = "invoke_skill"
@@ -41,10 +37,15 @@ public struct InvokeSkillTool: Tool {
         ])
     }
 
-    /// The catalog rides along into the system prompt automatically (the loop
-    /// collects `Tool.systemInstruction`).
+    /// カタログは `Tool.systemInstruction` としてループが自動的にシステムプロンプトへ注入する。
     public var systemInstruction: String? { catalog }
 
+    /// `name` パラメーターをデコードしてスキルをアクティベートし、実行結果を返す。
+    ///
+    /// - JSON デコード失敗または `name` が空: `.error("Missing required parameter 'name'.")` を返す（throw しない）。
+    /// - `.activated`: executor でスキルを実行し `.text(content)` を返す。
+    /// - `.unknown`: `.error` に利用可能スキル名一覧を付けて返す。
+    /// - `.notModelInvocable`: `.error` でトリガー専用である旨を返す。
     public func execute(with argumentsData: Data) async throws -> ToolResult {
         let name: String
         if let decoded = try? JSONDecoder().decode(Input.self, from: argumentsData), !decoded.name.isEmpty {
@@ -71,9 +72,9 @@ public struct InvokeSkillTool: Tool {
 
     // MARK: - Construction
 
-    /// Builds the tool from one snapshot of available skills — the single source
-    /// for both the catalog and the `name` enum. Returns `nil` when there are no
-    /// skills (don't register an empty tool / empty catalog).
+    /// 利用可能スキルのスナップショットからツールを構築する — カタログと `name` 列挙の単一ソース。
+    ///
+    /// スキルが 0 件なら `nil`（空のツール・カタログを登録しないため）。
     public static func make(
         skills: [LoadedSkill],
         activator: SkillActivator,
@@ -88,8 +89,7 @@ public struct InvokeSkillTool: Tool {
         return InvokeSkillTool(availableNames: names, activator: activator, executor: executor, catalog: catalog)
     }
 
-    /// The inline executor only needs a skill's identity; avoid a second registry
-    /// lookup in the tool layer.
+    /// インラインエグゼキューターはスキルの identity のみ必要 — ツール層での 2 回目のレジストリ検索を避ける。
     private static func identity(_ name: String) -> LoadedSkill {
         LoadedSkill(
             name: name, description: "", body: "",

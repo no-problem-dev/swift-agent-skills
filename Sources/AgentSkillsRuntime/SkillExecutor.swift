@@ -1,27 +1,24 @@
 import Foundation
 import AgentSkillsDiscovery
 
-/// How a skill is run once activated.
+/// アクティベーション後のスキル実行戦略を定義するプロトコル。
 ///
-/// The standard, built-in path is **inline**: the rendered body is injected into
-/// the current conversation. Running a skill in a separate subagent session
-/// ("fork") is an OPTIONAL pattern only some clients support and is NOT part of
-/// the Agent Skills standard — so it is modeled as an injected implementation a
-/// consumer provides, keeping this package free of any agent-runtime dependency.
+/// 標準の組み込みパスは**インライン**: レンダリング済み本体を現在の会話に注入する。
+/// サブエージェントの別セッションで実行する「fork」は一部クライアントのみが対応する任意パターンであり、
+/// Agent Skills 標準には含まれない — コンシューマが実装を注入することでこのパッケージをエージェントランタイム非依存に保つ。
 public protocol SkillExecutor: Sendable {
     func run(_ skill: LoadedSkill, renderedContent: String) async throws -> SkillExecutionResult
 }
 
-/// Result of running a skill.
+/// スキル実行の結果。
 public enum SkillExecutionResult: Sendable, Equatable {
-    /// Inject the content into the current conversation (the default path).
+    /// コンテンツを現在の会話に注入する（デフォルトのパス）。
     case inline(content: String)
-    /// A subagent ran the skill and produced this summary (consumer-provided).
+    /// サブエージェントがスキルを実行して生成したサマリー（コンシューマ提供）。
     case forked(summary: String)
 }
 
-/// Built-in inline executor: returns the rendered content for in-conversation
-/// injection. The only executor this package ships.
+/// 組み込みインラインエグゼキューター: レンダリング済みコンテンツを会話内注入用に返す。このパッケージが提供する唯一のエグゼキューター。
 public struct InlineSkillExecutor: SkillExecutor {
     public init() {}
     public func run(_ skill: LoadedSkill, renderedContent: String) async throws -> SkillExecutionResult {

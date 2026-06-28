@@ -1,13 +1,15 @@
 import Foundation
 import AgentSkillsDiscovery
 
-/// Renders the Tier-1 `<available_skills>` catalog for the system prompt.
+/// システムプロンプト向け Tier-1 `<available_skills>` カタログをレンダリングする。
 ///
-/// Production variant (distinct from the spec-parity `AgentSkills.SkillCatalog`):
-/// by default it **omits `<location>`** so the model cannot bypass the
-/// activation tool by reading the file directly (OpenHands behavior).
+/// 仕様互換の `AgentSkills.SkillCatalog` とは別の本番バリアント。
+/// デフォルトでは `<location>` を**省略**し、モデルがファイルを直接読んでアクティベーションツールを
+/// バイパスするのを防ぐ（OpenHands の動作に準拠）。
 public struct SkillCatalogRenderer: Sendable {
+    /// `<location>` タグをカタログに含めるか（デフォルト: `false` — モデルがファイルを直接読んでアクティベーションをバイパスするのを防ぐ）。
     public var includeLocation: Bool
+    /// カタログ内 description の最大文字数（デフォルト: 1024 文字。超過分は切り捨て）。
     public var maxDescriptionLength: Int
 
     public init(includeLocation: Bool = false, maxDescriptionLength: Int = 1024) {
@@ -15,8 +17,7 @@ public struct SkillCatalogRenderer: Sendable {
         self.maxDescriptionLength = maxDescriptionLength
     }
 
-    /// The `<available_skills>` block, or `nil` when there are no skills (so the
-    /// loop can omit the section entirely rather than show an empty one).
+    /// `<available_skills>` ブロックを返す。スキルが 0 件なら `nil`（空ブロックを表示しないためループが省略できる）。
     public func render(_ skills: [LoadedSkill]) -> String? {
         guard !skills.isEmpty else { return nil }
         var lines = ["<available_skills>"]
@@ -33,7 +34,7 @@ public struct SkillCatalogRenderer: Sendable {
         return lines.joined(separator: "\n")
     }
 
-    /// Short instruction block telling the model how to activate skills.
+    /// スキルのアクティベーション方法をモデルに伝える短い指示ブロック。
     public func instructions(toolName: String) -> String {
         """
         The following skills provide specialized instructions for specific tasks. \

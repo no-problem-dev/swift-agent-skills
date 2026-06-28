@@ -1,11 +1,10 @@
 import Foundation
 import PersistenceCore
 
-/// Discovers a skill's bundled `scripts/`/`references/`/`assets/` files.
+/// スキルにバンドルされた `scripts/`/`references/`/`assets/` ファイルを探索する。
 ///
-/// Mirrors OpenHands `discover_skill_resources`: enumerates files (recursively,
-/// returning relative paths) under each standard directory. Files are listed,
-/// never read — the model loads them on demand.
+/// OpenHands の `discover_skill_resources` を移植。各標準ディレクトリ配下を再帰列挙し、
+/// 相対パスを返す。ファイルは列挙するだけで読み込まない — モデルがオンデマンドで読む。
 enum SkillResourceLoader {
 
     static func discover(in skillDirectory: URL, fileSystem: some FileSystemReading) async -> SkillResources? {

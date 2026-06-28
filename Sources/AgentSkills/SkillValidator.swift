@@ -2,23 +2,22 @@ import Foundation
 import StructuredDataCore
 import PersistenceCore
 
-/// Strict Agent Skills standard validator.
+/// Agent Skills 標準に準拠した厳格バリデーター。
 ///
-/// Ports `skills-ref` validator.py. Returns a list of human-readable error
-/// strings (empty = valid), reproduced verbatim from the reference so output
-/// matches `skills-ref validate`.
+/// `skills-ref` validator.py を移植。エラーメッセージは参照実装と逐語的に一致し、
+/// `skills-ref validate` と同一の出力を返す。エラーなし（空配列）= 有効。
 public enum SkillValidator {
 
     public static let maxNameLength = 64
     public static let maxDescriptionLength = 1024
     public static let maxCompatibilityLength = 500
 
-    /// Frontmatter fields permitted by the Agent Skills spec.
+    /// Agent Skills 仕様が許可するフロントマターフィールド。
     public static let allowedFields: Set<String> = [
         "name", "description", "license", "allowed-tools", "metadata", "compatibility",
     ]
 
-    /// Validates a skill directory by reading and checking its `SKILL.md`.
+    /// スキルディレクトリの `SKILL.md` を読み込んで検証する。
     public static func validate(
         skillDirectory: URL,
         fileSystem: some FileSystemReading
@@ -44,10 +43,10 @@ public enum SkillValidator {
         return validate(frontmatter: frontmatter, directoryName: skillDirectory.lastPathComponent)
     }
 
-    /// Validates already-parsed frontmatter. Pure — no filesystem.
+    /// パース済みフロントマターを検証する。ファイルシステム不要のピュア関数。
     ///
-    /// - Parameter directoryName: the skill directory's name, for the
-    ///   name/directory match check; pass `nil` to skip it.
+    /// - Parameter directoryName: `name` とディレクトリ名の一致チェックに使うスキルディレクトリ名。
+    ///   `nil` を渡すとチェックをスキップする。
     public static func validate(frontmatter: OrderedObject, directoryName: String?) -> [String] {
         var errors: [String] = []
 

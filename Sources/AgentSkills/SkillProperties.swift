@@ -1,23 +1,22 @@
 import Foundation
 import StructuredDataCore
 
-/// Properties parsed from a skill's `SKILL.md` frontmatter.
+/// `SKILL.md` フロントマターから解析したスキルのプロパティ。
 ///
-/// Mirrors `skills-ref` `SkillProperties` (models.py). The standard surface is
-/// exactly these six fields — `name` and `description` required, the rest
-/// optional. Any other frontmatter field is a validation error.
+/// `skills-ref` の `SkillProperties`（models.py）を移植。標準が定めるフィールドはこの 6 つのみ —
+/// `name` と `description` は必須、残りはオプション。規定外のフィールドはバリデーションエラー。
 public struct SkillProperties: Sendable, Equatable, Codable {
-    /// Skill name in kebab-case (required).
+    /// ケバブケースのスキル名（必須）。
     public var name: String
-    /// What the skill does and when to use it (required).
+    /// スキルの概要とどんな時に使うか（必須）。
     public var description: String
-    /// License for the skill (optional).
+    /// スキルのライセンス（オプション）。
     public var license: String?
-    /// Environment/compatibility notes (optional).
+    /// 動作環境・互換性メモ（オプション）。
     public var compatibility: String?
-    /// Space-delimited pre-approved tool patterns (optional, experimental).
+    /// スペース区切りの事前承認済みツールパターン（オプション・実験的）。
     public var allowedTools: String?
-    /// Client-specific key/value metadata (defaults to empty).
+    /// クライアント固有のキー/バリューメタデータ（デフォルトは空）。
     public var metadata: [String: String]
 
     public init(
@@ -36,13 +35,12 @@ public struct SkillProperties: Sendable, Equatable, Codable {
         self.metadata = metadata
     }
 
-    /// Builds properties from already-parsed frontmatter.
+    /// パース済みフロントマターからプロパティを構築する。
     ///
-    /// Performs only the required-field checks that `skills-ref` `read_properties`
-    /// does; full validation is ``SkillValidator``.
+    /// `skills-ref` の `read_properties` と同じ必須フィールドチェックのみ実施。
+    /// 完全なバリデーションは ``SkillValidator`` を使う。
     ///
-    /// - Throws: ``SkillValidationError`` if `name`/`description` are missing or
-    ///   not non-empty strings.
+    /// - Throws: `name`/`description` が欠損または空文字の場合は ``SkillValidationError``。
     public init(frontmatter: OrderedObject) throws {
         guard frontmatter["name"] != nil else {
             throw SkillValidationError("Missing required field in frontmatter: name")
@@ -65,8 +63,9 @@ public struct SkillProperties: Sendable, Equatable, Codable {
         self.metadata = Self.stringifiedMetadata(frontmatter["metadata"])
     }
 
-    /// Coerces a `metadata` mapping's values to strings, matching the reference
-    /// `{str(k): str(v)}`. Numbers keep their verbatim source text.
+    /// `metadata` マッピングの値を文字列へ強制変換する。
+    ///
+    /// 参照実装の `{str(k): str(v)}` に準拠。数値はソーステキストをそのまま保持する。
     public static func stringifiedMetadata(_ value: StructuredValue?) -> [String: String] {
         guard let object = value?.object else { return [:] }
         var result: [String: String] = [:]
