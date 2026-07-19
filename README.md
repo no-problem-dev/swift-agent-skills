@@ -32,7 +32,7 @@ The filesystem is abstracted via `swift-persistence` `FileSystemReading`
 Add to `dependencies` in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", from: "<version>")
+.package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", from: "0.1.0")
 ```
 
 Add the required libraries to your target:
