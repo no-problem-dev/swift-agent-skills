@@ -2,6 +2,8 @@
 
 SKILL.md オープン標準の Swift 実装コア — パース・バリデーション・シリアライズ・カタログ生成を担うピュア層。
 
+> **非公式。** Agent Skills 標準の作者とは何の関係もなく、承認も受けていない。仕様に準拠することはこのプロジェクトの目標ではない。
+
 ## Overview
 
 `AgentSkills` は [Agent Skills 標準](https://agentskills.io) の Swift 移植。

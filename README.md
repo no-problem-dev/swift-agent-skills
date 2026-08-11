@@ -2,9 +2,11 @@
 
 English | [日本語](./README.ja.md)
 
-A standards-conformant Swift implementation of [Agent Skills](https://agentskills.io)
+A Swift implementation of [Agent Skills](https://agentskills.io)
 (the open `SKILL.md` standard originally developed by Anthropic, Apache-2.0,
 governed at `github.com/agentskills/agentskills`).
+
+> **Unofficial.** Not affiliated with or endorsed by the authors of the Agent Skills standard. Conforming to the specification is not a goal of this project.
 
 It is the "load procedural knowledge into one agent" primitive — complementary to
 A2A (advertise capabilities across agents) and MCP (connect tools). Skills are
@@ -18,7 +20,7 @@ Dependencies flow one way; the LLM coupling is isolated to a single thin target.
 
 | Target | Role | Depends on |
 |---|---|---|
-| `AgentSkills` | **Strict standard core** — parser / validator / catalog, a 1:1 port of `skills-ref` (`parser.py`/`validator.py`/`prompt.py`). | `StructuredDataCore`, `YAMLParsing`, `PersistenceCore` |
+| `AgentSkills` | **Strict standard core** — parser / validator / catalog, ported from `skills-ref` (`parser.py`/`validator.py`/`prompt.py`). | `StructuredDataCore`, `YAMLParsing`, `PersistenceCore` |
 | `AgentSkillsDiscovery` | **Lenient multi-root discovery** (warn-and-load) over an injected filesystem. `.agents/skills` (standard) + `.claude/skills` (compat), parent walk, trust gate, resource enumeration. | `AgentSkills`, `PersistenceCore` |
 | `AgentSkillsRuntime` | **Loop activation logic** — catalog renderer (location hidden), `SkillActivator`, dedupe, `SkillBodyRenderer` (Plain default), `SkillExecutor`. No LLM dependency. | `AgentSkillsDiscovery` |
 | `AgentSkillsTool` | **`invoke_skill` `Tool` adapter** — the only LLM-coupled surface. | `AgentSkillsRuntime`, `LLMTool` |
@@ -121,15 +123,15 @@ assert(errors.isEmpty)
 let serialized = SkillDocument.serialize(properties: properties, body: body)
 ```
 
-## Conformance via official tests (TDD)
+## Reference tests, ported (TDD)
 
-- `AgentSkills` is verified against the official `skills-ref` suite ported
-  verbatim — `test_parser.py` (16), `test_validator.py` (24/21), `test_prompt.py`
-  (4). NFKC + i18n names, the 6 `ALLOWED_FIELDS`, metadata stringification, and
-  `SKILL.md`/`skill.md` fallback all match the reference byte-for-byte.
+- The `skills-ref` test cases (`test_parser.py`, `test_validator.py`,
+  `test_prompt.py`) are ported into `swift test` and run there. They are ports, not
+  the upstream suite itself. NFKC + i18n names, the `ALLOWED_FIELDS` set, metadata
+  stringification, and `SKILL.md`/`skill.md` fallback are among the ported cases.
 - `AgentSkillsDiscovery` / `AgentSkillsRuntime` behavior is derived from OpenHands
   (`invoke_skill`, resource directories, name-mismatch lenience, precedence) and
-  the official client-implementation guide.
+  the upstream client-implementation guide.
 
 ## Security posture
 

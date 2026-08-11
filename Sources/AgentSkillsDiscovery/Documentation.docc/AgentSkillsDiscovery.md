@@ -6,7 +6,7 @@
 
 `AgentSkillsDiscovery` はファイルシステム上の `SKILL.md` を検出し、
 バリデーションエラーがあっても読み込み可能な限り**寛容に（warn-and-load）**ロードする。
-OpenHands の探索仕様と公式クライアントガイドを移植した設計。
+OpenHands の探索仕様と上流のクライアント実装ガイドを移植した設計。
 
 ファイルシステム依存は `FileSystemReading` / `FileSystemWriting` プロトコル
 （`swift-persistence` の `PersistenceCore` ）に集約されているため、

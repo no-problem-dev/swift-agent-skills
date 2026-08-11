@@ -2,7 +2,9 @@
 
 [English](./README.md) | 日本語
 
-[Agent Skills](https://agentskills.io)（Anthropic が開発しオープン化した `SKILL.md` 標準、Apache-2.0、`github.com/agentskills/agentskills` で管理）の Swift 準拠実装。
+[Agent Skills](https://agentskills.io)（Anthropic が開発しオープン化した `SKILL.md` 標準、Apache-2.0、`github.com/agentskills/agentskills` で管理）の Swift 実装。
+
+> **非公式。** Agent Skills 標準の作者とは何の関係もなく、承認も受けていない。仕様に準拠することはこのプロジェクトの目標ではない。
 
 「プロシージャル知識を 1 つのエージェントにロードする」基本プリミティブ。A2A（エージェント間の能力アドバタイズ）や MCP（ツール接続）と相補的な存在。スキルは**プログレッシブディスクロージャーによってコンテキストにロードされる不活性なデータ**であり、サブエージェント（「fork」）での実行はオプションの非標準パターンとしてコンシューマに委ねている（`SkillExecutor` 参照）。
 
@@ -12,7 +14,7 @@
 
 | ターゲット | 役割 | 依存 |
 |---|---|---|
-| `AgentSkills` | **厳格な標準コア** — パーサー/バリデーター/カタログ。`skills-ref`（`parser.py`/`validator.py`/`prompt.py`）を 1:1 で移植。 | `StructuredDataCore`, `YAMLParsing`, `PersistenceCore` |
+| `AgentSkills` | **厳格な標準コア** — パーサー/バリデーター/カタログ。`skills-ref`（`parser.py`/`validator.py`/`prompt.py`）から移植。 | `StructuredDataCore`, `YAMLParsing`, `PersistenceCore` |
 | `AgentSkillsDiscovery` | **寛容なマルチルート探索**（warn-and-load）— インジェクトされたファイルシステム経由。`.agents/skills`（標準）+ `.claude/skills`（互換）、親ウォーク、トラストゲート、リソース列挙。 | `AgentSkills`, `PersistenceCore` |
 | `AgentSkillsRuntime` | **ループアクティベーションロジック** — カタログレンダラー（location 非表示）、`SkillActivator`、重複排除、`SkillBodyRenderer`（Plain デフォルト）、`SkillExecutor`。LLM 依存なし。 | `AgentSkillsDiscovery` |
 | `AgentSkillsTool` | **`invoke_skill` `Tool` アダプター** — 唯一の LLM 結合面。 | `AgentSkillsRuntime`, `LLMTool` |
@@ -106,10 +108,10 @@ assert(errors.isEmpty)
 let serialized = SkillDocument.serialize(properties: properties, body: body)
 ```
 
-## 公式テストによる準拠確認（TDD）
+## 参照テストの移植（TDD）
 
-- `AgentSkills` は公式の `skills-ref` テストスイートを逐語移植して検証 — `test_parser.py`（16 件）、`test_validator.py`（24/21 件）、`test_prompt.py`（4 件）。NFKC + i18n 名前、6 つの `ALLOWED_FIELDS`、metadata 文字列化、`SKILL.md`/`skill.md` フォールバックはすべて参照実装とバイト互換。
-- `AgentSkillsDiscovery` / `AgentSkillsRuntime` の動作は OpenHands（`invoke_skill`、リソースディレクトリ、name 不一致の寛容処理、優先順位）と公式クライアント実装ガイドから導出。
+- `skills-ref` のテストケース（`test_parser.py` / `test_validator.py` / `test_prompt.py`）を `swift test` に移植して回している。移植であって、上流のスイートそのものを実行しているわけではない。NFKC + i18n 名前、`ALLOWED_FIELDS`、metadata 文字列化、`SKILL.md`/`skill.md` フォールバックは移植したケースに含まれる。
+- `AgentSkillsDiscovery` / `AgentSkillsRuntime` の動作は OpenHands（`invoke_skill`、リソースディレクトリ、name 不一致の寛容処理、優先順位）と上流のクライアント実装ガイドから導出。
 
 ## セキュリティ
 
