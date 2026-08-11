@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Raised the swift-llm-client pin to 5.0.0. No llm-client type appears in this package's public
+  signatures, so nothing a caller writes has to change — this only lets the two resolve together.
+
 ## [0.4.0] - 2026-08-11
 
 ### Fixed
