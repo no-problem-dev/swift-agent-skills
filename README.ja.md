@@ -60,7 +60,7 @@ if let skillTool = InvokeSkillTool.make(skills: await registry.available(), acti
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", .upToNextMinor(from: "0.4.0"))
+    .package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", .upToNextMinor(from: "0.5.0"))
 ]
 ```
 

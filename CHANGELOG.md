@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-11
+
 ### Changed
 
 - **BREAKING** — raised the swift-llm-client pin to 5.0.0. This *is* a public dependency:
