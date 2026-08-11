@@ -75,7 +75,7 @@ dependencies: [
 
 ## 要件
 
-- iOS 17.0+ / macOS 14.0+
+- iOS 17.0+ / macOS 14.0+ / Linux
 - Swift 6.2+
 
 ## ライセンス

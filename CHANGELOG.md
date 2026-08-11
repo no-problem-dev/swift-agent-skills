@@ -6,6 +6,11 @@
 
 - Raised the swift-llm-client pin to 5.0.0. No llm-client type appears in this package's public
   signatures, so nothing a caller writes has to change — this only lets the two resolve together.
+- Builds and tests on Linux, verified against `swift:6.2` in Docker. No source change was needed:
+  nothing here is Apple-only, and the manifest's existing version ranges already resolve to
+  swift-structured-data 3.0.1, which carries that package's Linux fix. A working copy still holding
+  a `Package.resolved` from before that release fails on `CFGetTypeID` until it resolves again —
+  the file is not tracked here, so a fresh checkout never sees it.
 
 ## [0.4.0] - 2026-08-11
 
