@@ -26,7 +26,7 @@
 `Package.swift` の `dependencies` に追加する:
 
 ```swift
-.package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", from: "0.1.0")
+.package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", .upToNextMinor(from: "0.2.0"))
 ```
 
 使用するターゲットに必要なライブラリを追加する:
