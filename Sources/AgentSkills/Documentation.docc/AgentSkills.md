@@ -1,87 +1,76 @@
 # ``AgentSkills``
 
-SKILL.md オープン標準の Swift 実装コア — パース・バリデーション・シリアライズ・カタログ生成を担うピュア層。
+Parse, validate, serialize and catalog `SKILL.md` files — the pure core of the SKILL.md open standard in Swift.
 
-> **非公式。** Agent Skills 標準の作者とは何の関係もなく、承認も受けていない。仕様に準拠することはこのプロジェクトの目標ではない。
+> **Unofficial.** This project has no connection to the authors of the Agent Skills standard and is not endorsed by them. Conforming to the specification is not a goal of this project.
 
 ## Overview
 
-`AgentSkills` は [Agent Skills 標準](https://agentskills.io) の Swift 移植。
-`SKILL.md` フロントマターのパース・バリデーション・シリアライズ、
-そしてエージェントのシステムプロンプトへ注入する `<available_skills>` カタログ生成を担う。
+`AgentSkills` is a Swift port of the [Agent Skills standard](https://agentskills.io). It reads and writes `SKILL.md` frontmatter, checks it against the standard's rules, and builds the `<available_skills>` catalog that goes into an agent's system prompt.
 
-このモジュールは一切の副作用を持たない**ピュア層**。
-ファイルシステムへの直接アクセスは行わず、`FileSystemReading` プロトコルを介したインジェクション形式を取る。
-そのため単体テストでインメモリ実装を差し込むことができ、CLI・サーバーの両環境で安全に利用できる。
+Nothing in this module reaches for a filesystem on its own. Directory-based entry points take a `FileSystemReading` backend, so a test can run the same code against an in-memory tree, and a sandboxed host can supply its own reader.
 
-### パッケージの構成
+This module is strict: a malformed `SKILL.md` throws. That is the right behavior for an authoring tool and the wrong one for loading whatever a user happens to have on disk, which is why `AgentSkillsDiscovery` re-implements loading leniently instead of reusing ``SkillFrontmatter`` as a gate.
 
-`swift-agent-skills` パッケージは 4 つのライブラリから成る。
-このモジュール（`AgentSkills`）が土台で、残り 3 つがそれぞれの役割を担う。
+### The four libraries
 
-ファイルシステムからスキルをスキャンして読み込む探索層は **`AgentSkillsDiscovery`** が担う。
-`FileSystemSkillDiscovery` によるマルチルート探索、`SkillRegistry` によるスキルの保持と検索、
-`SkillWriter` によるスキル作成・更新・削除が含まれる。
+`AgentSkills` is the foundation the other three build on.
 
-スキルを有効化してエージェントループへ注入する実行層は **`AgentSkillsRuntime`** が担う。
-`SkillActivator` による名前解決と重複排除、`SkillCatalogRenderer` による `<available_skills>` ブロックのレンダリング、
-`SkillSessionState` によるセッション内アクティベーション履歴の管理が含まれる。
-このモジュールも LLM スタックへの依存を持たないピュア層。
+- **`AgentSkillsDiscovery`** scans a filesystem for skills and loads them leniently, holds them in a registry, and writes new ones back out.
+- **`AgentSkillsRuntime`** renders the catalog for the system prompt and activates a skill on request. Like this module, it depends on no LLM library.
+- **`AgentSkillsTool`** is the only module that depends on `swift-llm-client`. It supplies `InvokeSkillTool`, which derives the catalog and the callable skill names from a single snapshot.
 
-LLM ツールとしての統合層は **`AgentSkillsTool`** が担う。
-`InvokeSkillTool` 1 つだけが `swift-llm-client` の `Tool` プロトコルに準拠し、
-カタログと `name` 列挙を単一のスナップショットから生成する。
-
-### 基本的な使い方
+### Reading a skill
 
 ```swift
 import AgentSkills
 
-// SKILL.md の内容をパースしてプロパティを取得する
 let content = """
 ---
 name: my-skill
-description: 何かをするスキル。
+description: Does the thing. Use when a draft needs checking.
 ---
-スキル本体の Markdown。
+The markdown body of the skill.
 """
 
 let (frontmatter, body) = try SkillFrontmatter.parseFrontmatter(content)
 let properties = try SkillProperties(frontmatter: frontmatter)
-print(properties.name)        // "my-skill"
-print(body)                   // "スキル本体の Markdown。"
+print(properties.name)   // "my-skill"
 
-// スキルを厳密にバリデートする
+// Strict validation is separate: parsing succeeds on skills validation rejects.
 let errors = SkillValidator.validate(frontmatter: frontmatter, directoryName: "my-skill")
 assert(errors.isEmpty)
 
-// SKILL.md ドキュメントを再シリアライズする
+// Write it back out. Field order is canonical, so the bytes are stable.
 let serialized = SkillDocument.serialize(properties: properties, body: body)
 ```
 
+### Two things that bite
+
+The closing `---` fence is found by scanning for the next `---` anywhere in the text, quoting included. A frontmatter value containing `---` therefore closes the block early, and the file fails to parse with a YAML error rather than an obvious one.
+
+Validation reports rather than throws. ``SkillValidator/validate(frontmatter:directoryName:)`` returns an array of messages; an empty array means valid. Code that ignores the return value validates nothing.
+
 ## Topics
 
-### スキルプロパティ
-
-- ``SkillProperties``
-
-### パース
+### Reading a skill
 
 - ``SkillFrontmatter``
+- ``SkillProperties``
 
-### バリデーション
+### Checking it
 
 - ``SkillValidator``
 
-### シリアライズ（オーサリング）
+### Writing one back
 
 - ``SkillDocument``
 
-### カタログ生成
+### Advertising skills to a model
 
 - ``SkillCatalog``
 
-### エラー
+### Errors
 
 - ``SkillParseError``
 - ``SkillValidationError``

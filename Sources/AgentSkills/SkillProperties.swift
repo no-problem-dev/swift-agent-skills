@@ -1,22 +1,30 @@
 import Foundation
 import StructuredDataCore
 
-/// `SKILL.md` フロントマターから解析したスキルのプロパティ。
+/// The six frontmatter fields the Agent Skills standard defines for a skill.
 ///
-/// `skills-ref` の `SkillProperties`（models.py）を移植。標準が定めるフィールドはこの 6 つのみ —
-/// `name` と `description` は必須、残りはオプション。規定外のフィールドはバリデーションエラー。
+/// `name` and `description` are required, the rest are optional, and any other key is a
+/// validation error — so this type cannot carry unknown fields: they are dropped on parse and
+/// never written back.
 public struct SkillProperties: Sendable, Equatable, Codable {
-    /// ケバブケースのスキル名（必須）。
+    /// Skill identifier: lowercase letters, digits and single hyphens, and it must equal the
+    /// name of the directory the skill lives in.
     public var name: String
-    /// スキルの概要とどんな時に使うか（必須）。
+    /// What the skill does and when to use it.
+    ///
+    /// The only text a model sees before deciding to activate the skill, and the field the
+    /// catalog truncates at 1024 characters.
     public var description: String
-    /// スキルのライセンス（オプション）。
+    /// License of the skill's content. Nothing validates the value.
     public var license: String?
-    /// 動作環境・互換性メモ（オプション）。
+    /// Free-form note about what the skill needs in order to run. Capped at 500 characters;
+    /// nothing in this package interprets it.
     public var compatibility: String?
-    /// スペース区切りの事前承認済みツールパターン（オプション・実験的）。
+    /// Space-separated tool patterns a host may pre-approve. Experimental, and never enforced
+    /// here — a host that honors it has to do so itself.
     public var allowedTools: String?
-    /// クライアント固有のキー/バリューメタデータ（デフォルトは空）。
+    /// Client-specific key/value pairs. Values are coerced to strings when parsed, so
+    /// `version: 1.0` reads back as `"1.0"`.
     public var metadata: [String: String]
 
     public init(
@@ -35,12 +43,15 @@ public struct SkillProperties: Sendable, Equatable, Codable {
         self.metadata = metadata
     }
 
-    /// パース済みフロントマターからプロパティを構築する。
+    /// Builds properties from an already-parsed frontmatter mapping.
     ///
-    /// `skills-ref` の `read_properties` と同じ必須フィールドチェックのみ実施。
-    /// 完全なバリデーションは ``SkillValidator`` を使う。
+    /// Enforces only the two required fields. Naming, length and unknown-field rules are not
+    /// checked, so a value that initializes fine here can still fail ``SkillValidator``.
+    /// `name` and `description` are trimmed; the optional fields are taken as written.
     ///
-    /// - Throws: `name`/`description` が欠損または空文字の場合は ``SkillValidationError``。
+    /// - Parameter frontmatter: Mapping from ``SkillFrontmatter/parseFrontmatter(_:)``.
+    /// - Throws: ``SkillValidationError`` when `name` or `description` is absent, not a string,
+    ///   or blank.
     public init(frontmatter: OrderedObject) throws {
         guard frontmatter["name"] != nil else {
             throw SkillValidationError("Missing required field in frontmatter: name")
@@ -63,9 +74,14 @@ public struct SkillProperties: Sendable, Equatable, Codable {
         self.metadata = Self.stringifiedMetadata(frontmatter["metadata"])
     }
 
-    /// `metadata` マッピングの値を文字列へ強制変換する。
+    /// Coerces a `metadata` mapping's values to strings.
     ///
-    /// 参照実装の `{str(k): str(v)}` に準拠。数値はソーステキストをそのまま保持する。
+    /// Numbers keep their source text, so `1.0` stays `"1.0"` instead of collapsing to `1`.
+    /// Booleans become `"true"`/`"false"`, and anything else — nested mapping, sequence, null —
+    /// becomes an empty string rather than being dropped or reported.
+    ///
+    /// - Parameter value: The `metadata` entry, or `nil` when the skill has none.
+    /// - Returns: The stringified pairs, empty when `value` is `nil` or not a mapping.
     public static func stringifiedMetadata(_ value: StructuredValue?) -> [String: String] {
         guard let object = value?.object else { return [:] }
         var result: [String: String] = [:]

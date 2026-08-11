@@ -1,22 +1,25 @@
 import Foundation
 import AgentSkillsDiscovery
 
-/// コンテキスト注入直前にスキルの本体をレンダリングするプロトコル。
+/// Turns a skill body into the text that gets injected, immediately before injection.
 ///
-/// デフォルト実装は ``PlainSkillRenderer``（本体をそのまま返す）。
-/// インライン `` !`cmd` `` ブロックを実行する動的レンダリングは別途オプトイン実装として提供する —
-/// スキルコンテンツからのシェル実行は最高リスクの攻撃面であるため、決してデフォルトにしない。
+/// The default, ``PlainSkillRenderer``, returns the body unchanged. A renderer that executes
+/// inline `` !`cmd` `` blocks is the largest attack surface in this whole flow, because skill
+/// content is untrusted input — so this package ships no such implementation and never makes one
+/// the default. A host that wants it has to write and opt into it.
 public protocol SkillBodyRenderer: Sendable {
-    /// スキル本体をコンテキスト注入向けにレンダリングして返す。
+    /// Renders a skill body for injection.
     ///
-    /// - Parameter skill: レンダリング対象のスキル。
-    /// - Parameter workingDirectory: 動的レンダラーが相対パスを解決する際の作業ディレクトリ。不要な場合は無視してよい。
-    /// - Returns: コンテキストに注入するレンダリング済み本体テキスト。
-    /// - Throws: 動的レンダリング（シェル実行など）に失敗した場合。``PlainSkillRenderer`` は throw しない。
+    /// - Parameters:
+    ///   - skill: The skill being activated.
+    ///   - workingDirectory: Directory a dynamic renderer resolves relative paths against.
+    ///     Renderers that do not need it ignore it.
+    /// - Returns: Text to inject into the conversation.
+    /// - Throws: Whatever the rendering step can fail with. ``PlainSkillRenderer`` never throws.
     func render(_ skill: LoadedSkill, workingDirectory: URL?) async throws -> String
 }
 
-/// コマンド実行なしで本体をそのまま返すアイデンティティレンダラー。セキュアなデフォルト実装。
+/// Returns the skill body unchanged. The secure default: it executes nothing.
 public struct PlainSkillRenderer: SkillBodyRenderer {
     public init() {}
     public func render(_ skill: LoadedSkill, workingDirectory: URL?) async throws -> String {

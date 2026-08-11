@@ -2,60 +2,32 @@
 
 English | [日本語](./README.ja.md)
 
-A Swift implementation of [Agent Skills](https://agentskills.io)
-(the open `SKILL.md` standard originally developed by Anthropic, Apache-2.0,
-governed at `github.com/agentskills/agentskills`).
+Give an agent a folder of written procedures and let it load only the one it needs, instead of carrying every instruction in its system prompt.
 
 > **Unofficial.** Not affiliated with or endorsed by the authors of the Agent Skills standard. Conforming to the specification is not a goal of this project.
 
-It is the "load procedural knowledge into one agent" primitive — complementary to
-A2A (advertise capabilities across agents) and MCP (connect tools). Skills are
-**inert data loaded into context via progressive disclosure**; running a skill in
-a subagent ("fork") is an optional, non-standard pattern and is intentionally left
-to the consumer (see `SkillExecutor`).
+## Overview
 
-## Target layering
+A Swift implementation of [Agent Skills](https://agentskills.io) — the open `SKILL.md` format
+(originally developed by Anthropic, Apache-2.0, governed at `github.com/agentskills/agentskills`).
+A skill is a directory holding instructions and supporting files. The agent sees a short catalog of
+what is available and pulls in a skill's full text only when it decides to use one.
 
-Dependencies flow one way; the LLM coupling is isolated to a single thin target.
+- **The prompt stays small** — the model reads one line per skill and asks for the body on demand,
+  so twenty skills cost roughly what a table of contents costs
+- **Skills are inert text** — loading one puts words in the context window and nothing else. Inline
+  `` !`cmd` `` blocks are not executed by the default renderer
+- **Untrusted checkouts cannot inject instructions** — project-level skill roots pass a trust gate
+  first, so cloning a repository does not hand it your agent's prompt
+- **Supporting files are listed, not read** — scripts and references show up as paths the model can
+  request, so a large skill directory does not arrive all at once
+- **Found where authors already put them** — `.agents/skills` plus `.claude/skills`, walking up from
+  the project directory, with project skills overriding user-level ones of the same name
+- **The filesystem is injectable** — real disk in production, in-memory in tests, same code path
 
-| Target | Role | Depends on |
-|---|---|---|
-| `AgentSkills` | **Strict standard core** — parser / validator / catalog, ported from `skills-ref` (`parser.py`/`validator.py`/`prompt.py`). | `StructuredDataCore`, `YAMLParsing`, `PersistenceCore` |
-| `AgentSkillsDiscovery` | **Lenient multi-root discovery** (warn-and-load) over an injected filesystem. `.agents/skills` (standard) + `.claude/skills` (compat), parent walk, trust gate, resource enumeration. | `AgentSkills`, `PersistenceCore` |
-| `AgentSkillsRuntime` | **Loop activation logic** — catalog renderer (location hidden), `SkillActivator`, dedupe, `SkillBodyRenderer` (Plain default), `SkillExecutor`. No LLM dependency. | `AgentSkillsDiscovery` |
-| `AgentSkillsTool` | **`invoke_skill` `Tool` adapter** — the only LLM-coupled surface. | `AgentSkillsRuntime`, `LLMTool` |
+## Quick Start
 
-The filesystem is abstracted via `swift-persistence` `FileSystemReading`
-(`PersistenceCore`), with `FoundationFileSystem` (disk) and `InMemoryFileSystem`
-(tests) as swappable implementations.
-
-## Installation (Swift Package Manager)
-
-Add to `dependencies` in `Package.swift`:
-
-```swift
-.package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", .upToNextMinor(from: "0.3.0"))
-```
-
-Add the required libraries to your target:
-
-```swift
-.target(
-    name: "MyTarget",
-    dependencies: [
-        .product(name: "AgentSkillsDiscovery", package: "swift-agent-skills"),
-        .product(name: "AgentSkillsRuntime", package: "swift-agent-skills"),
-        .product(name: "AgentSkillsTool", package: "swift-agent-skills"),
-    ]
-)
-```
-
-## Usage
-
-### Host integration (e.g. A2AResearchDemo)
-
-At session start a host discovers skills and registers the tool. The catalog is
-carried on `Tool.systemInstruction` — the loop injects it automatically:
+Discover the skills on disk and expose them to a loop as one tool:
 
 ```swift
 import AgentSkillsDiscovery
@@ -63,7 +35,6 @@ import AgentSkillsRuntime
 import AgentSkillsTool
 import PersistenceFileSystem
 
-// 1. Discover (secure defaults: trusted project, no command execution).
 let registry = SkillRegistry(discovery: FileSystemSkillDiscovery(
     config: .init(projectRoot: projectRoot, worktreeStop: repoRoot, homeDirectory: home,
                   isTrusted: { trustStore.isTrusted($0) }),
@@ -71,77 +42,42 @@ let registry = SkillRegistry(discovery: FileSystemSkillDiscovery(
 ))
 await registry.load()
 
-// 2. Tool → worker tool list. InvokeSkillTool sets Tool.systemInstruction;
-//    the loop injects the catalog automatically (no manual systemPrompt mutation needed).
 let activator = SkillActivator(registry: registry, session: SkillSessionState())
-var tools: [any Tool] = existingWorkerTools
 if let skillTool = InvokeSkillTool.make(skills: await registry.available(), activator: activator) {
-    tools.append(skillTool)
+    tools.append(skillTool)   // carries the catalog on Tool.systemInstruction
 }
 ```
 
-In StudioFeature this slots into `WorkerConfiguration.tools` (researcher/host) and
-the system-prompt assembly. Fork execution, if wanted for a worker, is provided by
-passing a consumer `SkillExecutor` built on `swift-agent-runtime`.
+## Documentation
 
-#### Release ordering (prerequisite for the app build)
+[**AgentSkills**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskills/) — parsing, validation and serialization ·
+[**AgentSkillsDiscovery**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillsdiscovery/) — search roots, precedence and the trust gate ·
+[**AgentSkillsRuntime**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillsruntime/) — catalog rendering and activation ·
+[**AgentSkillsTool**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillstool/) — the `invoke_skill` tool adapter
 
-The app uses versioned (git URL) dependencies, so integration requires, in order:
-
-1. Release `swift-persistence` with the new `FileSystemReading` (this repo depends
-   on it).
-2. Switch this package's dependencies from `path:` to versioned URLs and tag it.
-3. Add `swift-agent-skills` (URL) to `StudioFeature/Package.swift` and wire the
-   snippet above; build for iOS in Xcode.
-
-### Core API
-
-Parse, validate, and serialize `SKILL.md` content directly using `AgentSkills`:
+## Installation
 
 ```swift
-import AgentSkills
-
-// Parse SKILL.md content and access properties.
-let content = """
----
-name: my-skill
-description: Does something.
----
-Skill body in Markdown.
-"""
-
-let (frontmatter, body) = try SkillFrontmatter.parseFrontmatter(content)
-let properties = try SkillProperties(frontmatter: frontmatter)
-print(properties.name)   // "my-skill"
-print(body)              // "Skill body in Markdown."
-
-// Strict validation.
-let errors = SkillValidator.validate(frontmatter: frontmatter, directoryName: "my-skill")
-assert(errors.isEmpty)
-
-// Re-serialize the SKILL.md document.
-let serialized = SkillDocument.serialize(properties: properties, body: body)
+// Package.swift
+dependencies: [
+    .package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", .upToNextMinor(from: "0.3.0"))
+]
 ```
 
-## Reference tests, ported (TDD)
+Add the products you need. `AgentSkills` alone is enough to read and validate documents; the other
+three build up to a tool an agent loop can call:
 
-- The `skills-ref` test cases (`test_parser.py`, `test_validator.py`,
-  `test_prompt.py`) are ported into `swift test` and run there. They are ports, not
-  the upstream suite itself. NFKC + i18n names, the `ALLOWED_FIELDS` set, metadata
-  stringification, and `SKILL.md`/`skill.md` fallback are among the ported cases.
-- `AgentSkillsDiscovery` / `AgentSkillsRuntime` behavior is derived from OpenHands
-  (`invoke_skill`, resource directories, name-mismatch lenience, precedence) and
-  the upstream client-implementation guide.
+```swift
+.product(name: "AgentSkillsDiscovery", package: "swift-agent-skills"),
+.product(name: "AgentSkillsRuntime",   package: "swift-agent-skills"),
+.product(name: "AgentSkillsTool",      package: "swift-agent-skills"),
+```
 
-## Security posture
+## Requirements
 
-- **No command execution by default.** `PlainSkillRenderer` never runs inline
-  `` !`cmd` `` blocks; dynamic rendering is a separate opt-in `SkillBodyRenderer`.
-- **Trust gate** on project-level roots (`SkillDiscoveryConfig.isTrusted`) so an
-  untrusted cloned repo can't silently inject instructions.
-- **Resources are listed, never eagerly read** — the model loads them on demand.
-- **Catalog hides `<location>`** so the model must go through `invoke_skill`.
+- iOS 17.0+ / macOS 14.0+
+- Swift 6.2+
 
 ## License
 
-Apache License 2.0
+Apache License 2.0 — see [LICENSE](LICENSE).

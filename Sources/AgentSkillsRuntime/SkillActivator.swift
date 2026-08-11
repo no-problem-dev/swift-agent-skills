@@ -2,20 +2,24 @@ import Foundation
 import AgentSkills
 import AgentSkillsDiscovery
 
-/// スキルをアクティベートしようとした結果。
+/// What came of trying to activate a skill.
 public enum SkillActivationOutcome: Sendable, Equatable {
-    /// 注入可能なレンダリング済みスキルコンテンツ。`alreadyActive` が `true` なら再アクティベーション（ループは再注入をスキップできる）。
+    /// Rendered content, ready to inject. `alreadyActive` is `true` when this session activated
+    /// the skill before, so a loop can skip re-injecting it — the content is returned either way.
     case activated(content: String, alreadyActive: Bool)
-    /// 指定名のアドバタイズ済みスキルが存在しない。モデル向けにソート済みの利用可能名を保持する。
+    /// No skill of that name is registered. Carries the policy-filtered names in sorted order,
+    /// to hand back to the model.
     case unknown(available: [String])
-    /// スキルは存在するが、モデルから直接呼び出せないトリガー専用スキル。
+    /// The skill exists but the policy hides it from the model; only the host can trigger it.
     case notModelInvocable(name: String)
 }
 
-/// Tier-2 アクティベーション: スキル名を解決し、本体をレンダリングして会話向けにラップし、重複排除のために記録する。
+/// Resolves a skill by name, renders its body and wraps it for injection into the conversation.
 ///
-/// LLM スタック非依存のピュア実装 — レジストリ・ボディレンダラー・セッション状態のみ必要。
-/// `Tool` アダプターは `AgentSkillsTool` に分離している。
+/// Independent of any LLM stack — it needs a registry, a body renderer and session state, and
+/// the `Tool` adapter lives in `AgentSkillsTool`. Activation is recorded for de-duplication but
+/// never blocked: activating the same skill twice returns the content again with
+/// `alreadyActive` set, and it is the caller who decides to drop it.
 public struct SkillActivator: Sendable {
     private let registry: SkillRegistry
     private let renderer: any SkillBodyRenderer
@@ -23,8 +27,17 @@ public struct SkillActivator: Sendable {
     private let policy: SkillPolicy
     private let workingDirectory: URL?
 
-    /// `workingDirectory` は ``SkillBodyRenderer/render(_:workingDirectory:)`` に渡す。
-    /// 動的レンダラーがスキル内の相対パスを解決する際に参照する。`nil` の場合はレンダラーがデフォルトを決める。
+    /// Creates an activator over a loaded registry.
+    ///
+    /// - Parameters:
+    ///   - registry: Source of skills. Call its `load()` first, or every activation is unknown.
+    ///   - renderer: Turns a skill body into injectable text. The default runs no commands.
+    ///   - session: De-duplication state. Use one instance per conversation; a fresh one makes
+    ///     every activation look like the first.
+    ///   - policy: Decides which skills the model may activate. A hidden skill still resolves,
+    ///     as ``SkillActivationOutcome/notModelInvocable(name:)``.
+    ///   - workingDirectory: Handed to the renderer for resolving relative paths. `nil` lets the
+    ///     renderer pick its own default.
     public init(
         registry: SkillRegistry,
         renderer: any SkillBodyRenderer = PlainSkillRenderer(),
@@ -39,13 +52,15 @@ public struct SkillActivator: Sendable {
         self.workingDirectory = workingDirectory
     }
 
-    /// スキル名を解決し、本体をレンダリングして結果を返す。
+    /// Resolves a name, renders that skill and records the activation.
     ///
-    /// - `registry.get(name)` が `nil` → `.unknown(available:)` を返す。ポリシーでフィルタした利用可能スキル名一覧を付与する。
-    /// - `policy.isAllowed(name)` が `false` → `.notModelInvocable(name:)` を返す。スキルはトリガー専用でモデルから直接呼び出せない。
-    /// - それ以外 → `.activated(content:alreadyActive:)` を返す。`alreadyActive` はこのセッションで既にアクティベーション済みかどうかを示す（ループが再注入をスキップする判断に使える）。
+    /// The name is trimmed before lookup, but matched exactly after that — there is no fuzzy
+    /// resolution. A policy-hidden skill is reported as not model-invocable rather than unknown,
+    /// so the model is not told to guess again.
     ///
-    /// - Throws: ``SkillBodyRenderer/render(_:workingDirectory:)`` が throw した場合に伝播する。
+    /// - Parameter rawName: Skill name as the model wrote it; surrounding whitespace is ignored.
+    /// - Returns: The wrapped content, or the reason it could not be activated.
+    /// - Throws: Whatever the renderer throws. ``PlainSkillRenderer`` never does.
     public func activate(name rawName: String) async throws -> SkillActivationOutcome {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let skill = await registry.get(name) else {
@@ -62,7 +77,8 @@ public struct SkillActivator: Sendable {
         return .activated(content: content, alreadyActive: !isFirst)
     }
 
-    /// レンダリング済み本体を `<skill_content>` でラップし、ベースディレクトリフッターとリソースファイル一覧を付与する（OpenCode/OpenHands 形式）。
+    /// Wraps the rendered body in `<skill_content>`, appending the base-directory footer and the
+    /// bundled file list (the OpenCode/OpenHands shape).
     private func wrap(skill: LoadedSkill, body: String) -> String {
         var lines = ["<skill_content name=\"\(skill.name)\">"]
         lines.append(body.trimmingCharacters(in: .whitespacesAndNewlines))

@@ -1,22 +1,26 @@
 import Foundation
 
-/// セッション内で有効化済みのスキルを追跡する重複排除機構。
+/// Tracks which skills a conversation has already activated.
 ///
-/// ループが同一スキルの指示を二重注入しないよう管理する。OpenHands の `invoked_skills` に相当。
+/// Lets a loop inject a skill's instructions once instead of on every call. Use one instance per
+/// conversation: share it across conversations and the second one sees every skill as already
+/// activated, create a fresh one per turn and the de-duplication never fires.
 public actor SkillSessionState {
     private var invoked: Set<String> = []
 
     public init() {}
 
-    /// アクティベーションを記録する。初回アクティベーションなら `true` を返す。
+    /// Records an activation and reports whether it was the first one for this name.
+    ///
+    /// - Parameter name: Skill that was just activated.
+    /// - Returns: `true` on the first activation, `false` on every later one.
     @discardableResult
     public func record(_ name: String) -> Bool {
         invoked.insert(name).inserted
     }
 
-    /// このセッションでスキル `name` がアクティベーション済みかを返す。
+    /// Whether this name has already been recorded in this session.
     public func wasInvoked(_ name: String) -> Bool { invoked.contains(name) }
 
-    /// このセッションでアクティベーションされた全スキル名のセット。
     public var invokedSkills: Set<String> { invoked }
 }

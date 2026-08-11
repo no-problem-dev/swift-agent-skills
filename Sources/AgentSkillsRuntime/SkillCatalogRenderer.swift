@@ -1,15 +1,17 @@
 import Foundation
 import AgentSkillsDiscovery
 
-/// システムプロンプト向け Tier-1 `<available_skills>` カタログをレンダリングする。
+/// Renders the `<available_skills>` catalog for a system prompt from skills already in memory.
 ///
-/// 仕様互換の `AgentSkills.SkillCatalog` とは別の本番バリアント。
-/// デフォルトでは `<location>` を**省略**し、モデルがファイルを直接読んでアクティベーションツールを
-/// バイパスするのを防ぐ（OpenHands の動作に準拠）。
+/// The production counterpart to the spec-shaped `AgentSkills.SkillCatalog`: it omits
+/// `<location>` by default so the model cannot read a skill file itself and skip the activation
+/// tool, which is how OpenHands behaves.
 public struct SkillCatalogRenderer: Sendable {
-    /// `<location>` タグをカタログに含めるか（デフォルト: `false` — モデルがファイルを直接読んでアクティベーションをバイパスするのを防ぐ）。
+    /// Emit `<location>`. Off by default: a path in the prompt is an invitation for the model to
+    /// read the skill directly instead of calling the activation tool.
     public var includeLocation: Bool
-    /// カタログ内 description の最大文字数（デフォルト: 1024 文字。超過分は切り捨て）。
+    /// Descriptions longer than this are cut rather than rejected, so an over-long description
+    /// reaches the model truncated mid-sentence.
     public var maxDescriptionLength: Int
 
     public init(includeLocation: Bool = false, maxDescriptionLength: Int = 1024) {
@@ -17,7 +19,13 @@ public struct SkillCatalogRenderer: Sendable {
         self.maxDescriptionLength = maxDescriptionLength
     }
 
-    /// `<available_skills>` ブロックを返す。スキルが 0 件なら `nil`（空ブロックを表示しないためループが省略できる）。
+    /// Renders the `<available_skills>` block.
+    ///
+    /// Skills are sorted by name and `& < >` are escaped in both name and description.
+    ///
+    /// - Parameter skills: Skills to advertise, usually a registry's policy-filtered list.
+    /// - Returns: The block, or `nil` when `skills` is empty so a caller can drop the section
+    ///   from the prompt instead of showing an empty one.
     public func render(_ skills: [LoadedSkill]) -> String? {
         guard !skills.isEmpty else { return nil }
         var lines = ["<available_skills>"]
@@ -34,7 +42,10 @@ public struct SkillCatalogRenderer: Sendable {
         return lines.joined(separator: "\n")
     }
 
-    /// スキルのアクティベーション方法をモデルに伝える短い指示ブロック。
+    /// The paragraph that tells the model how to activate a skill. Put it before ``render(_:)``'s
+    /// output; the catalog alone does not say what to do with the names.
+    ///
+    /// - Parameter toolName: Name of the registered activation tool, as the model must call it.
     public func instructions(toolName: String) -> String {
         """
         The following skills provide specialized instructions for specific tasks. \

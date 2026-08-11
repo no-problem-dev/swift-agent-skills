@@ -2,22 +2,36 @@ import Foundation
 import StructuredDataCore
 import PersistenceCore
 
-/// Agent Skills 標準に準拠した厳格バリデーター。
+/// Strict checking of `SKILL.md` frontmatter against the Agent Skills rules.
 ///
-/// `skills-ref` validator.py を移植。エラーメッセージは参照実装と逐語的に一致し、
-/// `skills-ref validate` と同一の出力を返す。エラーなし（空配列）= 有効。
+/// Reports instead of throwing: an empty array means valid. Messages are copied word for word
+/// from the `skills-ref` validator so output can be compared against it.
+///
+/// Discovery deliberately does not use this as a gate — `FileSystemSkillDiscovery` loads the
+/// skill anyway and turns these into warnings.
 public enum SkillValidator {
 
     public static let maxNameLength = 64
     public static let maxDescriptionLength = 1024
     public static let maxCompatibilityLength = 500
 
-    /// Agent Skills 仕様が許可するフロントマターフィールド。
+    /// The only frontmatter keys the standard permits. Every other key is an error, and the
+    /// sorted list appears in that error's text.
     public static let allowedFields: Set<String> = [
         "name", "description", "license", "allowed-tools", "metadata", "compatibility",
     ]
 
-    /// スキルディレクトリの `SKILL.md` を読み込んで検証する。
+    /// Reads a skill directory's `SKILL.md` and validates it.
+    ///
+    /// Never throws. A missing path, a file where a directory was expected, a missing manifest
+    /// and an unreadable or malformed one each come back as a single message, and validation
+    /// stops there — one problem can hide the rest.
+    ///
+    /// - Parameters:
+    ///   - skillDirectory: Directory expected to contain `SKILL.md`; its last path component is
+    ///     what the `name` field must match.
+    ///   - fileSystem: Backend used to stat and read the manifest.
+    /// - Returns: One message per problem; empty means valid.
     public static func validate(
         skillDirectory: URL,
         fileSystem: some FileSystemReading
@@ -43,10 +57,15 @@ public enum SkillValidator {
         return validate(frontmatter: frontmatter, directoryName: skillDirectory.lastPathComponent)
     }
 
-    /// パース済みフロントマターを検証する。ファイルシステム不要のピュア関数。
+    /// Validates an already-parsed frontmatter mapping, without touching a filesystem.
     ///
-    /// - Parameter directoryName: `name` とディレクトリ名の一致チェックに使うスキルディレクトリ名。
-    ///   `nil` を渡すとチェックをスキップする。
+    /// Names are NFKC-normalized before every check, so a decomposed `name` still matches a
+    /// composed directory name and the reported name may differ from the source bytes.
+    ///
+    /// - Parameters:
+    ///   - frontmatter: Mapping from ``SkillFrontmatter/parseFrontmatter(_:)``.
+    ///   - directoryName: Directory name that `name` must equal; `nil` skips only that check.
+    /// - Returns: One message per problem; empty means valid.
     public static func validate(frontmatter: OrderedObject, directoryName: String?) -> [String] {
         var errors: [String] = []
 

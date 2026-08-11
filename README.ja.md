@@ -2,51 +2,32 @@
 
 [English](./README.md) | 日本語
 
-[Agent Skills](https://agentskills.io)（Anthropic が開発しオープン化した `SKILL.md` 標準、Apache-2.0、`github.com/agentskills/agentskills` で管理）の Swift 実装。
+手順書を並べたフォルダをエージェントに渡し、必要になった 1 つだけを読み込ませる。全部をシステムプロンプトに抱えさせない。
 
-> **非公式。** Agent Skills 標準の作者とは何の関係もなく、承認も受けていない。仕様に準拠することはこのプロジェクトの目標ではない。
+> **非公式。** Agent Skills 標準の作者とは無関係であり、承認も受けていない。仕様への準拠はこのプロジェクトの目標ではない。
 
-「プロシージャル知識を 1 つのエージェントにロードする」基本プリミティブ。A2A（エージェント間の能力アドバタイズ）や MCP（ツール接続）と相補的な存在。スキルは**プログレッシブディスクロージャーによってコンテキストにロードされる不活性なデータ**であり、サブエージェント（「fork」）での実行はオプションの非標準パターンとしてコンシューマに委ねている（`SkillExecutor` 参照）。
+## 概要
 
-## ターゲット構成
+[Agent Skills](https://agentskills.io) — オープンな `SKILL.md` 形式（Anthropic 発、Apache-2.0、
+`github.com/agentskills/agentskills` で管理）の Swift 実装。スキルとは、指示書と補助ファイルを収めた
+ディレクトリのこと。エージェントには「何があるか」の短いカタログだけが見え、実際に使うと決めたときに
+初めて本文が読み込まれる。
 
-依存は一方向。LLM 結合は単一の薄いターゲットに隔離している。
+- **プロンプトが太らない** — モデルが最初に読むのはスキル 1 つにつき 1 行。本文は必要時に要求するので、
+  20 個あっても目次 1 枚ぶんの費用で済む
+- **スキルは不活性なテキスト** — 読み込んでもコンテキストに文字列が入るだけ。既定のレンダラは
+  インラインの `` !`cmd` `` を実行しない
+- **信頼していないチェックアウトから指示を差し込まれない** — プロジェクト直下のスキル置き場は
+  トラストゲートを通る。リポジトリを clone しただけでエージェントのプロンプトを渡すことにはならない
+- **補助ファイルは列挙されるだけで読まれない** — スクリプトや参考資料はモデルが要求できるパスとして
+  現れる。大きなスキルディレクトリが一度に流れ込むことはない
+- **作者が既に置いている場所を見る** — `.agents/skills` と `.claude/skills` を、プロジェクトから
+  上へ辿りながら探索。同名ならプロジェクト側がユーザー側を上書きする
+- **ファイルシステムは差し替えられる** — 本番は実ディスク、テストはインメモリ、コードは同じ
 
-| ターゲット | 役割 | 依存 |
-|---|---|---|
-| `AgentSkills` | **厳格な標準コア** — パーサー/バリデーター/カタログ。`skills-ref`（`parser.py`/`validator.py`/`prompt.py`）から移植。 | `StructuredDataCore`, `YAMLParsing`, `PersistenceCore` |
-| `AgentSkillsDiscovery` | **寛容なマルチルート探索**（warn-and-load）— インジェクトされたファイルシステム経由。`.agents/skills`（標準）+ `.claude/skills`（互換）、親ウォーク、トラストゲート、リソース列挙。 | `AgentSkills`, `PersistenceCore` |
-| `AgentSkillsRuntime` | **ループアクティベーションロジック** — カタログレンダラー（location 非表示）、`SkillActivator`、重複排除、`SkillBodyRenderer`（Plain デフォルト）、`SkillExecutor`。LLM 依存なし。 | `AgentSkillsDiscovery` |
-| `AgentSkillsTool` | **`invoke_skill` `Tool` アダプター** — 唯一の LLM 結合面。 | `AgentSkillsRuntime`, `LLMTool` |
+## クイックスタート
 
-ファイルシステムは `swift-persistence` の `FileSystemReading`（`PersistenceCore`）で抽象化。`FoundationFileSystem`（ディスク）と `InMemoryFileSystem`（テスト）を差し替え可能な実装として提供する。
-
-## インストール（Swift Package Manager）
-
-`Package.swift` の `dependencies` に追加する:
-
-```swift
-.package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", .upToNextMinor(from: "0.3.0"))
-```
-
-使用するターゲットに必要なライブラリを追加する:
-
-```swift
-.target(
-    name: "MyTarget",
-    dependencies: [
-        .product(name: "AgentSkillsDiscovery", package: "swift-agent-skills"),
-        .product(name: "AgentSkillsRuntime", package: "swift-agent-skills"),
-        .product(name: "AgentSkillsTool", package: "swift-agent-skills"),
-    ]
-)
-```
-
-## 使い方
-
-### ホストへの統合（例: A2AResearchDemo）
-
-セッション開始時にホストがスキルを探索してツールを登録する。カタログは `Tool.systemInstruction` に乗り、ループが自動注入する:
+ディスク上のスキルを発見し、ループに 1 つのツールとして見せる:
 
 ```swift
 import AgentSkillsDiscovery
@@ -54,7 +35,6 @@ import AgentSkillsRuntime
 import AgentSkillsTool
 import PersistenceFileSystem
 
-// 1. 探索（セキュアなデフォルト: 信頼済みプロジェクト、コマンド実行なし）
 let registry = SkillRegistry(discovery: FileSystemSkillDiscovery(
     config: .init(projectRoot: projectRoot, worktreeStop: repoRoot, homeDirectory: home,
                   isTrusted: { trustStore.isTrusted($0) }),
@@ -62,64 +42,42 @@ let registry = SkillRegistry(discovery: FileSystemSkillDiscovery(
 ))
 await registry.load()
 
-// 2. ツール → ワーカーツールリスト。InvokeSkillTool が Tool.systemInstruction でカタログを保持し、
-//    ループが自動注入する（systemPrompt への手動ミューテーションは不要）。
 let activator = SkillActivator(registry: registry, session: SkillSessionState())
-var tools: [any Tool] = existingWorkerTools
 if let skillTool = InvokeSkillTool.make(skills: await registry.available(), activator: activator) {
-    tools.append(skillTool)
+    tools.append(skillTool)   // カタログは Tool.systemInstruction に載る
 }
 ```
 
-StudioFeature では `WorkerConfiguration.tools`（researcher/host）とシステムプロンプト組み立てに組み込む。ワーカーで fork 実行が必要な場合は `swift-agent-runtime` 上に構築したコンシューマ `SkillExecutor` を渡す。
+## ドキュメント
 
-#### リリース順序（アプリビルドの前提条件）
+[**AgentSkills**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskills/) — 解析・検証・直列化 ·
+[**AgentSkillsDiscovery**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillsdiscovery/) — 探索先・優先順位・トラストゲート ·
+[**AgentSkillsRuntime**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillsruntime/) — カタログ描画とアクティベーション ·
+[**AgentSkillsTool**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillstool/) — `invoke_skill` ツールアダプタ
 
-アプリはバージョン付き（git URL）依存を使うため、統合は次の順序で行う:
-
-1. `swift-persistence` に新しい `FileSystemReading` を追加してリリースする（本リポジトリが依存）。
-2. このパッケージの依存を `path:` からバージョン付き URL に切り替えてタグを打つ。
-3. `StudioFeature/Package.swift` に `swift-agent-skills`（URL）を追加し、上記スニペットを組み込んで iOS 向けに Xcode でビルドする。
-
-### コア API の基本的な使い方
+## インストール
 
 ```swift
-import AgentSkills
-
-// SKILL.md の内容をパースしてプロパティを取得する
-let content = """
----
-name: my-skill
-description: 何かをするスキル。
----
-スキル本体の Markdown。
-"""
-
-let (frontmatter, body) = try SkillFrontmatter.parseFrontmatter(content)
-let properties = try SkillProperties(frontmatter: frontmatter)
-print(properties.name)        // "my-skill"
-print(body)                   // "スキル本体の Markdown。"
-
-// スキルを厳密にバリデートする
-let errors = SkillValidator.validate(frontmatter: frontmatter, directoryName: "my-skill")
-assert(errors.isEmpty)
-
-// SKILL.md ドキュメントを再シリアライズする
-let serialized = SkillDocument.serialize(properties: properties, body: body)
+// Package.swift
+dependencies: [
+    .package(url: "https://github.com/no-problem-dev/swift-agent-skills.git", .upToNextMinor(from: "0.3.0"))
+]
 ```
 
-## 参照テストの移植（TDD）
+必要なプロダクトを追加する。読み込みと検証だけなら `AgentSkills` 単体で足りる。残り 3 つは
+エージェントループから呼べるツールへ積み上げていく:
 
-- `skills-ref` のテストケース（`test_parser.py` / `test_validator.py` / `test_prompt.py`）を `swift test` に移植して回している。移植であって、上流のスイートそのものを実行しているわけではない。NFKC + i18n 名前、`ALLOWED_FIELDS`、metadata 文字列化、`SKILL.md`/`skill.md` フォールバックは移植したケースに含まれる。
-- `AgentSkillsDiscovery` / `AgentSkillsRuntime` の動作は OpenHands（`invoke_skill`、リソースディレクトリ、name 不一致の寛容処理、優先順位）と上流のクライアント実装ガイドから導出。
+```swift
+.product(name: "AgentSkillsDiscovery", package: "swift-agent-skills"),
+.product(name: "AgentSkillsRuntime",   package: "swift-agent-skills"),
+.product(name: "AgentSkillsTool",      package: "swift-agent-skills"),
+```
 
-## セキュリティ
+## 要件
 
-- **デフォルトでコマンド実行なし。** `PlainSkillRenderer` はインライン `` !`cmd` `` ブロックを実行しない。動的レンダリングは別途オプトインの `SkillBodyRenderer` として提供。
-- **トラストゲート**をプロジェクトレベルルートに設ける（`SkillDiscoveryConfig.isTrusted`）— 信頼されていないクローンされたリポジトリが静かに指示を注入するのを防ぐ。
-- **リソースはリストアップするだけで先読みしない** — モデルがオンデマンドでロードする。
-- **カタログは `<location>` を非表示にする** — モデルは必ず `invoke_skill` を経由する必要がある。
+- iOS 17.0+ / macOS 14.0+
+- Swift 6.2+
 
 ## ライセンス
 
-Apache License 2.0
+Apache License 2.0 — [LICENSE](LICENSE) を参照。

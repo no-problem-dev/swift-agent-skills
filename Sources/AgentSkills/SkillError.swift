@@ -1,9 +1,10 @@
 import Foundation
 
-/// `SKILL.md` のパース失敗時にスローされるエラー。
+/// A `SKILL.md` that could not be split into frontmatter and body.
 ///
-/// `skills-ref` の `ParseError` を移植。メッセージは参照実装と逐語的に一致させており、
-/// `skills-ref validate` の出力とバイト互換。
+/// The fixed messages are copied word for word from the `skills-ref` Python implementation, so
+/// tooling can compare output against it. ``invalidYAML(_:)`` is the exception: its detail comes
+/// from the Swift YAML parser and does not match the Python text.
 public struct SkillParseError: Error, Equatable, CustomStringConvertible {
     public let message: String
     public init(_ message: String) { self.message = message }
@@ -26,13 +27,16 @@ public struct SkillParseError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-/// 必須スキルプロパティの欠損または不正値を示すエラー。
+/// Required skill properties are missing or invalid.
 ///
-/// `skills-ref` の `ValidationError` を移植。1 件以上のメッセージを保持する。
+/// Carries every problem at once instead of failing on the first, so an authoring UI can show
+/// the full list in one pass.
 public struct SkillValidationError: Error, Equatable, CustomStringConvertible {
     public let errors: [String]
     public init(_ message: String) { self.errors = [message] }
     public init(errors: [String]) { self.errors = errors }
+    /// First message only. Empty string when the error was built from an empty list — read
+    /// ``errors`` when the count matters.
     public var message: String { errors.first ?? "" }
     public var description: String { errors.joined(separator: "; ") }
 }

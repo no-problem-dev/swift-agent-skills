@@ -2,18 +2,22 @@ import Foundation
 import StructuredDataCore
 import YAMLParsing
 
-/// `SKILL.md` のオーサリング側 — ``SkillFrontmatter`` パースの逆操作。
+/// Turns skill properties back into `SKILL.md` text — the authoring side of frontmatter parsing.
 ///
-/// ``SkillProperties`` を仕様準拠のフロントマターおよびフル `SKILL.md` ドキュメントへシリアライズする。
-/// ファイルシステム不要のピュア実装で、`parseFrontmatter(serialize(p, body))` により `p` と `body` を復元できる。
-/// ディスク書き込みは `AgentSkillsDiscovery` の `SkillWriter` が担う。
+/// Pure: nothing here touches a filesystem, so it is safe to call from anywhere. Writing the
+/// result to disk is `SkillWriter`'s job, in `AgentSkillsDiscovery`.
+///
+/// `SkillFrontmatter.parseFrontmatter(serialize(p, body))` gives back `p` and the trimmed body,
+/// but only for values that survive the fence scan: a field whose value contains `---` closes
+/// the frontmatter early when it is read back.
 public enum SkillDocument {
 
     private static let serializer = YAMLSerializer(options: .init(sortKeys: false))
 
-    /// 仕様が定める標準順序でフロントマターマッピングを構築する。
+    /// Builds the frontmatter mapping in the field order the standard prescribes.
     ///
-    /// 未設定のオプションフィールドは省略する。`metadata` のキーは決定論的出力のためソートする。
+    /// Unset optional fields are omitted, and `metadata` keys are sorted, so the same properties
+    /// always produce the same bytes.
     public static func frontmatter(_ properties: SkillProperties) -> OrderedObject {
         var object = OrderedObject()
         object.append(key: "name", value: .string(properties.name))
@@ -37,12 +41,18 @@ public enum SkillDocument {
         return object
     }
 
-    /// フロントマターマッピングを YAML テキストへシリアライズする（`---` フェンスなし）。
+    /// Serializes the frontmatter mapping to YAML text, without the surrounding `---` fences.
     public static func frontmatterYAML(_ properties: SkillProperties) -> String {
         serializer.string(from: .object(frontmatter(properties)))
     }
 
-    /// 完全な `SKILL.md` ドキュメントをシリアライズする。フェンス付きフロントマターとマークダウン本体を連結する。
+    /// Serializes a complete `SKILL.md`: fenced frontmatter followed by the markdown body.
+    ///
+    /// The body is trimmed; an empty one yields a frontmatter-only document.
+    ///
+    /// - Parameters:
+    ///   - properties: Frontmatter fields to emit.
+    ///   - body: Markdown instructions to place after the closing fence.
     public static func serialize(properties: SkillProperties, body: String) -> String {
         let yaml = frontmatterYAML(properties)
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -52,7 +62,12 @@ public enum SkillDocument {
         return "---\n" + yaml + "---\n\n" + trimmedBody + "\n"
     }
 
-    /// オーサリング用の厳格バリデーションゲート。`skills-ref validate` と同じルールで検証し、エラー文字列の配列を返す（空 = 有効）。
+    /// Runs the strict gate an author should pass before writing a skill to disk.
+    ///
+    /// The directory-name check uses `properties.name` as the directory, so that one rule can
+    /// never fail here — validate the real directory with ``SkillValidator`` if it matters.
+    ///
+    /// - Returns: One message per problem; empty means the properties are publishable.
     public static func validate(_ properties: SkillProperties) -> [String] {
         SkillValidator.validate(frontmatter: frontmatter(properties), directoryName: properties.name)
     }

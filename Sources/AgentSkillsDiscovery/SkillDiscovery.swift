@@ -2,34 +2,44 @@ import Foundation
 import AgentSkills
 import PersistenceCore
 
-/// スキルをあるソースから探索して寛容に読み込むプロトコル。
+/// A place skills can be scanned for on demand.
 public protocol SkillDiscovering: Sendable {
-    /// スキルを探索し、ロードした結果と診断（警告・エラー）を返す。
+    /// Scans the source and returns every skill it could load, plus what went wrong.
     ///
-    /// 実装は寛容（warn-and-load）— 厳格バリデーションに失敗しても本体と description が揃っていれば読み込み、
-    /// 問題は ``DiscoveredSkills/diagnostics`` に記録する。
+    /// Implementations are lenient: a skill that fails strict validation still loads as long as
+    /// it has a description, and the failures are recorded in ``DiscoveredSkills/diagnostics``.
+    /// Nothing throws — a skill that cannot be read or parsed becomes an `.error` diagnostic and
+    /// is dropped from the result, so a caller that ignores diagnostics silently loses skills.
     func discover() async -> DiscoveredSkills
 }
 
-/// ファイルシステムベースの探索設定。
+/// Which directories a filesystem scan covers, and the limits it runs under.
 public struct SkillDiscoveryConfig: Sendable {
-    /// プロジェクトツリーの起点（親ディレクトリウォークの開始点）。
+    /// Where the project-level walk starts. Every directory from here up to ``worktreeStop`` is
+    /// checked for skill subdirectories.
     public var projectRoot: URL?
-    /// 親ウォークの終点（例: git/worktree ルート）。ここを含む上位は探索しない。
+    /// Last directory the upward walk visits, inclusive — usually the git or worktree root.
+    /// Leave it `nil` to scan ``projectRoot`` alone and not walk up at all.
     public var worktreeStop: URL?
-    /// ユーザーレベルスキルのホームディレクトリ。
+    /// Home directory holding user-level skills. `nil` skips the user scope entirely.
     public var homeDirectory: URL?
-    /// `.agents/skills/` を探索するか（クロスクライアント標準の場所）。
+    /// Scan `.agents/skills/`, the cross-client standard location.
     public var scanAgentsDir: Bool
-    /// `.claude/skills/` を探索するか（既存スキルとの実用的な互換性）。
+    /// Scan `.claude/skills/`, for skills already written for Claude Code. It is scanned after
+    /// `.agents/skills/`, so when both hold the same name in one directory the Claude copy wins.
     public var scanClaudeDir: Bool
-    /// 追加で明示的に探索するスキルルート。
+    /// Extra skill roots, scanned last and at the highest precedence.
+    ///
+    /// They outrank project and user skills, and ``isTrusted`` is not consulted for them.
     public var extraRoots: [URL]
-    /// ルート内の最大ディレクトリ探索深度。
+    /// How deep below a root the scan descends. A directory holding a `SKILL.md` is treated as a
+    /// skill and never descended into, so nested skills are invisible regardless of this value.
     public var maxDepth: Int
-    /// ルートあたりの最大訪問ディレクトリ数（暴走ガード）。
+    /// Directory budget per root. When it runs out the scan for that root stops where it is and
+    /// records no diagnostic, so a very large tree quietly yields a partial list.
     public var maxEntries: Int
-    /// プロジェクトレベルルートのトラストゲート。信頼されていないルートはスキップする。
+    /// Gate applied to project-scope roots only. Returning `false` skips the root; user roots and
+    /// ``extraRoots`` are scanned without asking.
     public var isTrusted: @Sendable (URL) -> Bool
 
     public init(
@@ -55,7 +65,8 @@ public struct SkillDiscoveryConfig: Sendable {
     }
 }
 
-/// スキルが発見されたスコープ。衝突時の優先度を決定する（explicit > project > user）。
+/// Where a skill was found. Ranks the sources when two skills share a name: explicit beats
+/// project, project beats user.
 public enum SkillScope: Int, Sendable, Comparable {
     case user = 0
     case project = 1
@@ -63,7 +74,15 @@ public enum SkillScope: Int, Sendable, Comparable {
     public static func < (lhs: SkillScope, rhs: SkillScope) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
-/// インジェクトされた ``FileSystemReading`` を介してファイルシステムから寛容にスキルを探索する実装。
+/// Scans a filesystem for `SKILL.md` files and loads them leniently.
+///
+/// Roots are visited user first, then project — from ``SkillDiscoveryConfig/projectRoot``
+/// upward — then ``SkillDiscoveryConfig/extraRoots``. On a name clash the higher scope wins and
+/// the loser is reported as a warning; between two roots of the *same* scope the one visited
+/// later wins, so an ancestor directory shadows the project root itself.
+///
+/// The filesystem arrives by injection, so the same scan runs against a real tree or an
+/// in-memory one. It only ever reads and lists — no skill content is executed here.
 public struct FileSystemSkillDiscovery<FS: FileSystemReading>: SkillDiscovering {
     private let config: SkillDiscoveryConfig
     private let fileSystem: FS
@@ -73,6 +92,12 @@ public struct FileSystemSkillDiscovery<FS: FileSystemReading>: SkillDiscovering 
         self.fileSystem = fileSystem
     }
 
+    /// Scans every configured root and returns the surviving skills, sorted by name.
+    ///
+    /// A skill is dropped, with an `.error` diagnostic, when its `SKILL.md` cannot be read or
+    /// parsed or when it has no description. Every other rule violation — a `name` that does not
+    /// match the directory, an over-long description — is a warning and the skill still loads.
+    /// Each shadowed duplicate also produces a warning naming the scope that won.
     public func discover() async -> DiscoveredSkills {
         var loaded: [(scope: SkillScope, skill: LoadedSkill)] = []
         var diagnostics: [SkillDiagnostic] = []
@@ -139,7 +164,7 @@ public struct FileSystemSkillDiscovery<FS: FileSystemReading>: SkillDiscovering 
         return names
     }
 
-    /// `projectRoot` から `worktreeStop`（含む）までのディレクトリ一覧。
+    /// Directories from `projectRoot` up to and including `worktreeStop`.
     private func projectWalk() -> [URL] {
         guard let start = config.projectRoot?.standardizedFileURL else { return [] }
         var dirs: [URL] = []
@@ -249,7 +274,7 @@ public struct FileSystemSkillDiscovery<FS: FileSystemReading>: SkillDiscovering 
 
 import StructuredDataCore
 
-/// `loadSkill` がパース済みマッピングと本体を一緒に保持するための内部ホルダー。
+/// Keeps the parsed mapping and the body together while `loadSkill` builds a skill.
 private struct StructuredFrontmatter {
     let object: OrderedObject
     let body: String

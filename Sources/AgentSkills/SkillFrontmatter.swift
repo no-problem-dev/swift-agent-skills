@@ -3,18 +3,26 @@ import StructuredDataCore
 import YAMLParsing
 import PersistenceCore
 
-/// `SKILL.md` の YAML フロントマターパーサー。
+/// Splits `SKILL.md` text into YAML frontmatter and markdown body.
 ///
-/// `skills-ref` parser.py を移植。``parseFrontmatter(_:)`` はファイルシステム不要のピュア関数。
-/// ディレクトリ起点の API は ``FileSystemReading`` をインジェクションで受け取るため、
-/// インメモリ実装への差し替えとテストが容易。
+/// Strict: anything malformed throws. Discovery wants the opposite and loads a broken skill
+/// anyway — see `FileSystemSkillDiscovery` in `AgentSkillsDiscovery`.
+///
+/// ``parseFrontmatter(_:)`` is pure; the directory-based entry points take a `FileSystemReading`
+/// so they can run against an in-memory tree in tests.
 public enum SkillFrontmatter {
 
     private static let yaml = YAMLParser()
 
-    /// `SKILL.md` の内容をフロントマターとマークダウン本体に分割する。
+    /// Splits `SKILL.md` content into its frontmatter mapping and the trimmed markdown body.
     ///
-    /// - Throws: フロントマターが存在しない・閉じていない・不正な YAML・マッピングでない場合は ``SkillParseError``。
+    /// The closing fence is the next `---` anywhere in the text, quoting included, so a value
+    /// containing `---` ends the block early and the remainder fails to parse as YAML.
+    ///
+    /// - Parameter content: Full text of a `SKILL.md` file.
+    /// - Returns: The frontmatter mapping and the body with surrounding whitespace removed.
+    /// - Throws: ``SkillParseError`` when the frontmatter is missing, unterminated, invalid YAML,
+    ///   or not a mapping.
     public static func parseFrontmatter(_ content: String) throws -> (frontmatter: OrderedObject, body: String) {
         guard content.hasPrefix("---") else {
             throw SkillParseError.mustStartWithFrontmatter
@@ -42,7 +50,14 @@ public enum SkillFrontmatter {
         return (mapping, body)
     }
 
-    /// スキルマニフェストを検索する。`SKILL.md` を `skill.md` より優先する。
+    /// Locates a skill's manifest, preferring `SKILL.md` over `skill.md`.
+    ///
+    /// Only those two names are tried, and only directly inside the directory. Returns `nil`
+    /// rather than throwing when neither exists.
+    ///
+    /// - Parameters:
+    ///   - skillDirectory: Directory expected to hold the manifest.
+    ///   - fileSystem: Backend used for the existence checks.
     public static func findSkillMD(in skillDirectory: URL, fileSystem: some FileSystemReading) async -> URL? {
         for name in ["SKILL.md", "skill.md"] {
             let candidate = skillDirectory.appendingPathComponent(name)
@@ -53,12 +68,16 @@ public enum SkillFrontmatter {
         return nil
     }
 
-    /// スキルディレクトリの `SKILL.md` からプロパティを読み込む。
+    /// Reads a skill directory's `SKILL.md` and parses its frontmatter into properties.
     ///
-    /// 完全なバリデーションは行わない（``SkillValidator`` を使うこと）。
+    /// Checks only that `name` and `description` are present and non-empty. Naming, length and
+    /// unknown-field rules are not applied — use ``SkillValidator`` for those.
     ///
-    /// - Throws: マニフェストが存在しないか不正な場合は ``SkillParseError``、
-    ///   `name`/`description` が欠損する場合は ``SkillValidationError``。
+    /// - Parameters:
+    ///   - skillDirectory: Directory containing `SKILL.md` (or `skill.md`).
+    ///   - fileSystem: Backend used to find and read the manifest.
+    /// - Throws: ``SkillParseError`` when the manifest is missing or malformed, or
+    ///   ``SkillValidationError`` when `name` or `description` is missing or blank.
     public static func readProperties(
         from skillDirectory: URL,
         fileSystem: some FileSystemReading

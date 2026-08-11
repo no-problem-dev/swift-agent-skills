@@ -1,15 +1,25 @@
 import Foundation
 import PersistenceCore
 
-/// エージェントのシステムプロンプト向け `<available_skills>` XML ブロックを生成する。
+/// Builds the `<available_skills>` block for an agent's system prompt, in the shape the standard
+/// specifies.
 ///
-/// `skills-ref` prompt.py をバイトレベルで移植した参照実装。`<location>` を**含む**仕様準拠形式。
-/// ツール経由のアクティベーションを強制したい場合は、ランタイム層の location を省略する変形を使う。
+/// This variant emits `<location>`, which hands the model a path it can read on its own and so
+/// lets it skip the activation tool. Hosts that want the tool to be the only route should use
+/// `SkillCatalogRenderer` in `AgentSkillsRuntime`, which omits the path by default.
 public enum SkillCatalog {
 
-    /// 指定したスキルディレクトリ群からカタログブロックを生成する。
+    /// Renders the catalog block for the given skill directories.
     ///
-    /// - Throws: いずれかのスキルの `SKILL.md` を読み込めない場合は ``SkillParseError`` または ``SkillValidationError``。
+    /// Reads every `SKILL.md` on the spot, and one broken skill fails the whole catalog. A host
+    /// that already ran discovery should render from its loaded skills instead of re-reading.
+    /// An empty input produces an empty `<available_skills>` block, not `nil`.
+    ///
+    /// - Parameters:
+    ///   - skillDirectories: Directories that each contain a `SKILL.md`.
+    ///   - fileSystem: Backend used to read the manifests.
+    /// - Throws: ``SkillParseError`` or ``SkillValidationError`` from the first skill that fails
+    ///   to read or parse.
     public static func toPrompt(
         skillDirectories: [URL],
         fileSystem: some FileSystemReading
@@ -42,7 +52,7 @@ public enum SkillCatalog {
         return lines.joined(separator: "\n")
     }
 
-    /// Python `html.escape(quote=True)` と同等: `& < > " '` をエスケープする。
+    /// Escapes `& < > " '`, matching Python's `html.escape(quote: true)`.
     private static func htmlEscape(_ string: String) -> String {
         var result = string.replacingOccurrences(of: "&", with: "&amp;")
         result = result.replacingOccurrences(of: "<", with: "&lt;")

@@ -4,11 +4,16 @@ import LLMTool
 import AgentSkillsDiscovery
 import AgentSkillsRuntime
 
-/// エージェントループが登録する `invoke_skill` ツール — `systemInstruction` に Tier-1 `<available_skills>` カタログを乗せるための一級 `Tool`。
+/// The `invoke_skill` tool an agent loop registers so the model can load a skill's full
+/// instructions.
 ///
-/// OpenHands が `agent_context.skills` から別々に導出する 2 つの要素（カタログ → システムメッセージ・自動アタッチツール）を
-/// 構造上で統一する: `[LoadedSkill]` の単一スナップショットが、カタログ（`Tool.systemInstruction` 経由でループが注入）と
-/// `name` 列挙の両方を生成する。モデルが見えるスキルと呼び出せるスキルは必ず一致する。
+/// One snapshot of `[LoadedSkill]` produces both halves of the contract: the `<available_skills>`
+/// catalog, carried in ``systemInstruction`` for the loop to inject, and the `name` enum in
+/// ``inputSchema``. The model can therefore never be shown a skill it cannot call, or call one it
+/// was not shown.
+///
+/// The snapshot is frozen at construction. Reloading the registry does not update this tool —
+/// build a new one with ``make(skills:activator:catalogRenderer:executor:)``.
 public struct InvokeSkillTool: Tool {
 
     public static let toolName = "invoke_skill"
@@ -37,15 +42,20 @@ public struct InvokeSkillTool: Tool {
         ])
     }
 
-    /// カタログは `Tool.systemInstruction` としてループが自動的にシステムプロンプトへ注入する。
+    /// The activation instructions and catalog, which the loop injects into the system prompt.
+    /// Do not also render the catalog yourself, or the model sees it twice.
     public var systemInstruction: String? { catalog }
 
-    /// `name` パラメーターをデコードしてスキルをアクティベートし、実行結果を返す。
+    /// Activates the skill named in the arguments and returns its content to the model.
     ///
-    /// - JSON デコード失敗または `name` が空: `.error("Missing required parameter 'name'.")` を返す（throw しない）。
-    /// - `.activated`: executor でスキルを実行し `.text(content)` を返す。
-    /// - `.unknown`: `.error` に利用可能スキル名一覧を付けて返す。
-    /// - `.notModelInvocable`: `.error` でトリガー専用である旨を返す。
+    /// Bad input never throws: missing or empty `name`, an unknown skill and a trigger-only skill
+    /// all come back as `ToolResult.error` text the model can read and correct itself against.
+    ///
+    /// - Parameter argumentsData: JSON tool arguments. Only `name` is read; anything else is
+    ///   ignored.
+    /// - Returns: The wrapped skill content, or an error result — the unknown-skill one lists
+    ///   the names that would have worked.
+    /// - Throws: Whatever the activator's renderer or the executor throws.
     public func execute(with argumentsData: Data) async throws -> ToolResult {
         let name: String
         if let decoded = try? JSONDecoder().decode(Input.self, from: argumentsData), !decoded.name.isEmpty {
@@ -72,9 +82,18 @@ public struct InvokeSkillTool: Tool {
 
     // MARK: - Construction
 
-    /// 利用可能スキルのスナップショットからツールを構築する — カタログと `name` 列挙の単一ソース。
+    /// Builds the tool from a snapshot of available skills, the single source for both the
+    /// catalog and the `name` enum.
     ///
-    /// スキルが 0 件なら `nil`（空のツール・カタログを登録しないため）。
+    /// - Parameters:
+    ///   - skills: Skills to advertise, typically a registry's `available()` list.
+    ///   - activator: Resolves and renders a skill when the model calls the tool. It must be
+    ///     backed by the same registry these skills came from, or advertised names will not
+    ///     resolve.
+    ///   - catalogRenderer: Renders the catalog block. The default hides skill file paths.
+    ///   - executor: What to do with the rendered content. The default injects it inline.
+    /// - Returns: `nil` when `skills` is empty, so a host can skip registering a tool whose
+    ///   `name` enum would have no cases.
     public static func make(
         skills: [LoadedSkill],
         activator: SkillActivator,
@@ -89,7 +108,8 @@ public struct InvokeSkillTool: Tool {
         return InvokeSkillTool(availableNames: names, activator: activator, executor: executor, catalog: catalog)
     }
 
-    /// インラインエグゼキューターはスキルの identity のみ必要 — ツール層での 2 回目のレジストリ検索を避ける。
+    /// Name-only skill handed to the executor, avoiding a second registry lookup. Body,
+    /// description and resources are empty, so a custom executor cannot read them.
     private static func identity(_ name: String) -> LoadedSkill {
         LoadedSkill(
             name: name, description: "", body: "",

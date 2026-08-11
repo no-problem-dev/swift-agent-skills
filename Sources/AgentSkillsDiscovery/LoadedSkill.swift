@@ -1,33 +1,40 @@
 import Foundation
 import AgentSkills
 
-/// 発見されたスキルの保存場所。
+/// Where a loaded skill's content came from.
 public enum SkillLocation: Sendable, Equatable, Codable {
-    /// （仮想も含む）ファイルシステム上の `SKILL.md` ファイル。
+    /// A `SKILL.md` on whichever filesystem the scan ran against — a real path, or a virtual one
+    /// in tests.
     case file(URL)
-    /// ホストに組み込まれたビルトインスキル。名前で識別する。
+    /// Compiled into the host. There is no directory, so bundled resources cannot be resolved.
     case builtin(name: String)
 
-    /// スキルのベースディレクトリ（`SKILL.md` の親）。
+    /// Directory that `scripts/`, `references/` and `assets/` paths resolve against.
     ///
-    /// `scripts/`, `references/`, `assets/` の相対パス解決に使う。ビルトインの場合は `nil`。
+    /// `nil` for builtins, which is what makes a builtin unable to carry resource files.
     public var directory: URL? {
         if case .file(let url) = self { return url.deletingLastPathComponent() }
         return nil
     }
 }
 
-/// スキルが `SKILL.md` と共に格納できる標準リソースディレクトリ群。
+/// Files a skill ships next to its `SKILL.md`, listed but never read.
+///
+/// Paths in each list are relative to *that* subdirectory, not to ``root``: a file at
+/// `<root>/scripts/util/run.sh` is stored as `util/run.sh`. Prepend the subdirectory name before
+/// resolving one against ``root``.
 public struct SkillResources: Sendable, Equatable, Codable {
+    /// The three subdirectory names the standard reserves. Anything else next to `SKILL.md` is
+    /// ignored.
     public static let directoryNames = ["scripts", "references", "assets"]
 
-    /// スキルのベースディレクトリの絶対パス。
+    /// Absolute path of the skill's own directory, the one holding `SKILL.md`.
     public let root: URL
-    /// `scripts/` 配下のファイルの相対パス一覧。
+    /// Executable helpers, relative to `<root>/scripts/`.
     public let scripts: [String]
-    /// `references/` 配下のファイルの相対パス一覧。
+    /// Reference material the model can read on demand, relative to `<root>/references/`.
     public let references: [String]
-    /// `assets/` 配下のファイルの相対パス一覧。
+    /// Static files the skill uses, relative to `<root>/assets/`.
     public let assets: [String]
 
     public init(root: URL, scripts: [String] = [], references: [String] = [], assets: [String] = []) {
@@ -40,19 +47,24 @@ public struct SkillResources: Sendable, Equatable, Codable {
     public var hasResources: Bool { !scripts.isEmpty || !references.isEmpty || !assets.isEmpty }
 }
 
-/// メモリにロードされた、カタログ化・アクティベーション可能なスキル。
+/// A skill held in memory, ready to be catalogued and activated.
 ///
-/// 寛容ロード: `name` がディレクトリ名と一致しないなど厳格バリデーションに失敗しても、
-/// 本体と説明が揃っていれば読み込む。厳格エラーは ``SkillDiagnostic`` の警告として記録される。
+/// Existing here does not mean the skill was valid. Discovery loads a skill whose `name` does
+/// not match its directory, or whose description is over the limit, and records the problems as
+/// ``SkillDiagnostic`` warnings instead.
 public struct LoadedSkill: Sendable, Equatable, Identifiable, Codable {
+    /// Same as the skill's name, which is also the key the registry deduplicates on.
     public var id: String { name }
+    /// Name the skill is invoked by. Falls back to the directory name when the frontmatter has
+    /// none, so it does not always equal `properties.name` as written on disk.
     public let name: String
     public let description: String
-    /// スキルの Markdown 本体（フロントマターを除く）。空文字も許容される。
+    /// Markdown after the frontmatter. Legitimately empty — a skill with no instructions still
+    /// loads.
     public let body: String
     public let location: SkillLocation
     public let properties: SkillProperties
-    /// スキルのリソースディレクトリ群（`scripts/`, `references/`, `assets/`）。ビルトインスキルや対応ディレクトリがない場合は `nil`。
+    /// Bundled files, or `nil` when the skill has none — which is always the case for builtins.
     public let resources: SkillResources?
 
     public init(
@@ -72,7 +84,10 @@ public struct LoadedSkill: Sendable, Equatable, Identifiable, Codable {
     }
 }
 
-/// スキルの探索・読み込み中に発生した、致命的でない問題。
+/// Something that went wrong during a scan without stopping it.
+///
+/// Severity says what happened to the skill: a `warning` means it loaded anyway, an `error`
+/// means it was skipped and will not appear in ``DiscoveredSkills/skills``.
 public struct SkillDiagnostic: Sendable, Equatable, Codable {
     public enum Severity: String, Sendable, Codable { case warning, error }
     public let severity: Severity
@@ -86,9 +101,12 @@ public struct SkillDiagnostic: Sendable, Equatable, Codable {
     }
 }
 
-/// 探索パスの結果。
+/// The outcome of one scan.
 public struct DiscoveredSkills: Sendable {
+    /// Surviving skills, deduplicated by name and sorted by it.
     public let skills: [LoadedSkill]
+    /// Everything that went wrong. Skipped skills only show up here, so a scan that returns few
+    /// skills and no diagnostics found nothing, while few skills and many errors is a broken tree.
     public let diagnostics: [SkillDiagnostic]
     public init(skills: [LoadedSkill], diagnostics: [SkillDiagnostic]) {
         self.skills = skills
