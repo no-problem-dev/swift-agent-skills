@@ -13,7 +13,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0"),
         .package(url: "https://github.com/no-problem-dev/swift-structured-data.git", from: "3.0.0"),
-        .package(url: "https://github.com/no-problem-dev/swift-persistence.git", from: "2.2.0"),
+        .package(url: "https://github.com/no-problem-dev/swift-persistence.git", from: "3.0.0"),
         .package(url: "https://github.com/no-problem-dev/swift-llm-client.git", from: "4.0.0"),
     ],
     targets: [
