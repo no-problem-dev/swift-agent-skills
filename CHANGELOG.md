@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-11
+
 ### Fixed
 
 - **BREAKING** — `SkillWriter` joined an unvalidated name to the skills root, so a name could name
