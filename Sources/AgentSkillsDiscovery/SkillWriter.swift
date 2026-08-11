@@ -11,6 +11,9 @@ public enum SkillWriteError: Error, Equatable {
     case nameCollision(String)
     /// No skill directory with that name exists to update.
     case notFound(String)
+    /// The name does not land on a directory directly under the root — it climbs out with `..`,
+    /// carries a path separator, or is empty. Nothing was touched.
+    case nameEscapesRoot(String)
 }
 
 /// Creates, updates and deletes user-authored skills under one root directory — the write side
@@ -20,9 +23,10 @@ public enum SkillWriteError: Error, Equatable {
 /// loads without warnings. A rename moves the whole directory, keeping bundled `scripts/`,
 /// `references/` and `assets/` files with it.
 ///
-/// Only ``SkillProperties/name`` goes through validation. ``delete(name:)`` and the
-/// `originalName` of ``update(originalName:properties:body:)`` are appended to the root exactly
-/// as given, so never pass unchecked input to those.
+/// Every name that reaches disk — ``SkillProperties/name``, the `name` of ``delete(name:)`` and
+/// the `originalName` of ``update(originalName:properties:body:)`` — is resolved and checked for
+/// containment first, so a name like `../../Documents` is refused rather than followed out of the
+/// root.
 public struct SkillWriter<FS: FileSystemReading & FileSystemWriting>: Sendable {
 
     /// Directory the skills live under, one subdirectory per skill — for example
@@ -35,12 +39,29 @@ public struct SkillWriter<FS: FileSystemReading & FileSystemWriting>: Sendable {
         self.fileSystem = fileSystem
     }
 
-    private func directory(_ name: String) -> URL {
-        root.appendingPathComponent(name, isDirectory: true)
+    /// Resolves a skill name to its directory, refusing anything that does not land directly
+    /// under ``root``.
+    ///
+    /// The name is joined to the root and the result is resolved, collapsing `..` and `.`, before
+    /// the check — so containment is decided on the path that would actually be written, not on
+    /// the text of the name. The layout is one directory per skill, so the test is that the
+    /// resolved parent *is* the root: a string prefix would let `<root>-backup` through, and an
+    /// unresolved comparison would let `<root>/../../Documents` through.
+    ///
+    /// The single place containment is decided. Every path this type builds comes from here.
+    ///
+    /// - Throws: ``SkillWriteError/nameEscapesRoot(_:)``.
+    private func directory(_ name: String) throws -> URL {
+        let base = root.standardizedFileURL
+        let candidate = root.appendingPathComponent(name, isDirectory: true).standardizedFileURL
+        guard candidate.deletingLastPathComponent().standardizedFileURL.path == base.path else {
+            throw SkillWriteError.nameEscapesRoot(name)
+        }
+        return candidate
     }
 
-    private func manifest(_ name: String) -> URL {
-        directory(name).appendingPathComponent("SKILL.md")
+    private func manifest(_ name: String) throws -> URL {
+        try directory(name).appendingPathComponent("SKILL.md")
     }
 
     /// Writes a new skill to `<root>/<name>/SKILL.md`, creating the directories it needs.
@@ -48,11 +69,12 @@ public struct SkillWriter<FS: FileSystemReading & FileSystemWriting>: Sendable {
     /// - Parameters:
     ///   - properties: Frontmatter for the new skill; `name` becomes the directory name.
     ///   - body: Markdown instructions placed after the frontmatter.
-    /// - Throws: ``SkillWriteError/validationFailed(_:)`` before touching disk, or
+    /// - Throws: ``SkillWriteError/validationFailed(_:)`` before touching disk,
+    ///   ``SkillWriteError/nameEscapesRoot(_:)`` when the name does not land under the root, or
     ///   ``SkillWriteError/nameCollision(_:)`` when that directory already exists.
     public func create(properties: SkillProperties, body: String) async throws {
         try validate(properties)
-        guard await fileSystem.exists(directory(properties.name)) == false else {
+        guard await fileSystem.exists(try directory(properties.name)) == false else {
             throw SkillWriteError.nameCollision(properties.name)
         }
         try await fileSystem.write(SkillDocument.serialize(properties: properties, body: body),
@@ -65,23 +87,26 @@ public struct SkillWriter<FS: FileSystemReading & FileSystemWriting>: Sendable {
     /// a rename, the skill sits under its new directory name with its old manifest.
     ///
     /// - Parameters:
-    ///   - originalName: Name the skill currently has on disk. Not validated — joined to the
-    ///     root as given.
+    ///   - originalName: Name the skill currently has on disk. Checked for containment under the
+    ///     root before anything is read or moved.
     ///   - properties: New frontmatter. A changed `name` renames the directory.
     ///   - body: Markdown that replaces the existing body entirely.
     /// - Throws: ``SkillWriteError/validationFailed(_:)`` before touching disk,
+    ///   ``SkillWriteError/nameEscapesRoot(_:)`` when either name leaves the root,
     ///   ``SkillWriteError/notFound(_:)`` when `originalName` does not exist, or
     ///   ``SkillWriteError/nameCollision(_:)`` when the new name is taken.
     public func update(originalName: String, properties: SkillProperties, body: String) async throws {
         try validate(properties)
-        guard await fileSystem.exists(directory(originalName)) else {
+        let source = try directory(originalName)
+        guard await fileSystem.exists(source) else {
             throw SkillWriteError.notFound(originalName)
         }
         if properties.name != originalName {
-            guard await fileSystem.exists(directory(properties.name)) == false else {
+            let destination = try directory(properties.name)
+            guard await fileSystem.exists(destination) == false else {
                 throw SkillWriteError.nameCollision(properties.name)
             }
-            try await fileSystem.moveItem(from: directory(originalName), to: directory(properties.name))
+            try await fileSystem.moveItem(from: source, to: destination)
         }
         try await fileSystem.write(SkillDocument.serialize(properties: properties, body: body),
                                    to: manifest(properties.name))
@@ -89,12 +114,13 @@ public struct SkillWriter<FS: FileSystemReading & FileSystemWriting>: Sendable {
 
     /// Removes a skill's directory and everything inside it.
     ///
-    /// Deleting a skill that is not there is not an error. The name is not validated and is
-    /// joined to the root as given.
+    /// Deleting a skill that is not there is not an error. A name that does not land on a
+    /// directory directly under the root is refused before anything is removed.
     ///
     /// - Parameter name: Directory name of the skill to remove.
+    /// - Throws: ``SkillWriteError/nameEscapesRoot(_:)`` when the name leaves the root.
     public func delete(name: String) async throws {
-        try await fileSystem.removeItem(directory(name))
+        try await fileSystem.removeItem(try directory(name))
     }
 
     private func validate(_ properties: SkillProperties) throws {

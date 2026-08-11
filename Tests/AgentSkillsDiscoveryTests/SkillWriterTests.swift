@@ -102,4 +102,74 @@ struct SkillWriterTests {
         #expect(await fs.exists(root.appendingPathComponent("gone")) == false)
         try await w.delete(name: "gone") // no throw
     }
+
+    // MARK: - Names that escape the root
+
+    /// A tree the writer has no business touching, next to the skills root rather than under it.
+    private let outsideFile = URL(fileURLWithPath: "/home/user/Documents/taxes.txt")
+
+    @Test("delete refuses a name that climbs out of the root")
+    func deleteRefusesTraversal() async throws {
+        let fs = InMemoryFileSystem()
+        await fs.addFile(outsideFile, string: "keep me")
+
+        await #expect(throws: SkillWriteError.self) {
+            try await writer(fs).delete(name: "../../Documents")
+        }
+        #expect(await fs.exists(outsideFile), "delete must not remove a tree outside the root")
+    }
+
+    @Test("delete refuses an empty name rather than removing the whole root")
+    func deleteRefusesEmptyName() async throws {
+        let fs = InMemoryFileSystem()
+        let w = writer(fs)
+        try await w.create(properties: props("keep"), body: "x")
+
+        await #expect(throws: SkillWriteError.self) {
+            try await w.delete(name: "")
+        }
+        #expect(await fs.exists(root.appendingPathComponent("keep/SKILL.md")),
+                "delete must not wipe every skill under the root")
+    }
+
+    @Test("delete refuses a name carrying a path separator")
+    func deleteRefusesNestedName() async throws {
+        let fs = InMemoryFileSystem()
+        await fs.addFile(root.appendingPathComponent("real/scripts/run.sh"), string: "#!/bin/bash")
+
+        await #expect(throws: SkillWriteError.self) {
+            try await writer(fs).delete(name: "real/scripts")
+        }
+        #expect(await fs.exists(root.appendingPathComponent("real/scripts/run.sh")),
+                "a skill name is one directory, not a path")
+    }
+
+    @Test("update refuses an originalName that climbs out of the root")
+    func updateRefusesTraversal() async throws {
+        let fs = InMemoryFileSystem()
+        await fs.addFile(outsideFile, string: "keep me")
+
+        await #expect(throws: SkillWriteError.self) {
+            try await writer(fs).update(originalName: "../../Documents",
+                                        properties: props("hijacked"), body: "b")
+        }
+        #expect(await fs.exists(outsideFile), "update must not move a tree from outside the root")
+        #expect(await fs.exists(root.appendingPathComponent("hijacked")) == false)
+    }
+
+    @Test("update refuses a new name that climbs out of the root")
+    func updateRefusesTraversalInNewName() async throws {
+        let fs = InMemoryFileSystem()
+        let w = writer(fs)
+        try await w.create(properties: props("here"), body: "x")
+
+        await #expect(throws: SkillWriteError.self) {
+            try await w.update(originalName: "here",
+                               properties: SkillProperties(name: "../../Documents",
+                                                           description: "A useful skill."),
+                               body: "b")
+        }
+        #expect(await fs.exists(root.appendingPathComponent("here/SKILL.md")))
+        #expect(await fs.exists(URL(fileURLWithPath: "/home/user/Documents/SKILL.md")) == false)
+    }
 }
