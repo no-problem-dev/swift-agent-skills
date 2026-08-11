@@ -4,8 +4,9 @@
 
 ### Changed
 
-- Raised the swift-llm-client pin to 5.0.0. No llm-client type appears in this package's public
-  signatures, so nothing a caller writes has to change — this only lets the two resolve together.
+- **BREAKING** — raised the swift-llm-client pin to 5.0.0. This *is* a public dependency:
+  `InvokeSkillTool` conforms to `Tool` and its `inputSchema` and `execute` signatures carry
+  `JSONSchema` and `ToolResult`, so a caller holding one has to be on llm-client 5 too.
 - Builds and tests on Linux, verified against `swift:6.2` in Docker. No source change was needed:
   nothing here is Apple-only, and the manifest's existing version ranges already resolve to
   swift-structured-data 3.0.1, which carries that package's Linux fix. A working copy still holding
