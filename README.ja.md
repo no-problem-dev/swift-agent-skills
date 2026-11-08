@@ -50,10 +50,10 @@ if let skillTool = InvokeSkillTool.make(skills: await registry.available(), acti
 
 ## ドキュメント
 
-[**AgentSkills**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskills/) — 解析・検証・直列化 ·
-[**AgentSkillsDiscovery**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillsdiscovery/) — 探索先・優先順位・トラストゲート ·
-[**AgentSkillsRuntime**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillsruntime/) — カタログ描画とアクティベーション ·
-[**AgentSkillsTool**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillstool/) — `invoke_skill` ツールアダプタ
+[**AgentSkills**](Sources/AgentSkills/Documentation.docc) — 解析・検証・直列化 ·
+[**AgentSkillsDiscovery**](Sources/AgentSkillsDiscovery/Documentation.docc) — 探索先・優先順位・トラストゲート ·
+[**AgentSkillsRuntime**](Sources/AgentSkillsRuntime/Documentation.docc) — カタログ描画とアクティベーション ·
+[**AgentSkillsTool**](Sources/AgentSkillsTool/Documentation.docc) — `invoke_skill` ツールアダプタ
 
 ## インストール
 

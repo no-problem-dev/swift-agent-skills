@@ -50,10 +50,10 @@ if let skillTool = InvokeSkillTool.make(skills: await registry.available(), acti
 
 ## Documentation
 
-[**AgentSkills**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskills/) — parsing, validation and serialization ·
-[**AgentSkillsDiscovery**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillsdiscovery/) — search roots, precedence and the trust gate ·
-[**AgentSkillsRuntime**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillsruntime/) — catalog rendering and activation ·
-[**AgentSkillsTool**](https://no-problem-dev.github.io/swift-agent-skills/documentation/agentskillstool/) — the `invoke_skill` tool adapter
+[**AgentSkills**](Sources/AgentSkills/Documentation.docc) — parsing, validation and serialization ·
+[**AgentSkillsDiscovery**](Sources/AgentSkillsDiscovery/Documentation.docc) — search roots, precedence and the trust gate ·
+[**AgentSkillsRuntime**](Sources/AgentSkillsRuntime/Documentation.docc) — catalog rendering and activation ·
+[**AgentSkillsTool**](Sources/AgentSkillsTool/Documentation.docc) — the `invoke_skill` tool adapter
 
 ## Installation
 
